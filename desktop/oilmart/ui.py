@@ -22,18 +22,14 @@ from .shifts import ShiftError, active_shift, close_shift, open_shift
 
 MODERN_STYLE = """
 QWidget {
-    font-family: 'Segoe UI', 'Inter', sans-serif;
+    font-family: 'Inter', 'Segoe UI', sans-serif;
     font-size: 14px;
-    color: #1f2937;
-    background-color: #f9fafb;
+    color: #e2e8f0;
+    background-color: #0f172a;
 }
 
-QMainWindow {
-    background-color: #f3f4f6;
-}
-
-QDialog {
-    background-color: #ffffff;
+QMainWindow, QDialog {
+    background-color: #0f172a;
 }
 
 QLabel {
@@ -41,61 +37,64 @@ QLabel {
 }
 
 QLabel#titleLabel {
-    font-size: 22px;
+    font-size: 24px;
     font-weight: bold;
-    color: #111827;
+    color: #f8fafc;
 }
 
 QLabel#subtitleLabel {
     font-size: 14px;
-    color: #6b7280;
+    color: #94a3b8;
 }
 
 QLabel#totalLabel {
-    font-size: 24px;
+    font-size: 26px;
     font-weight: bold;
-    color: #059669;
+    color: #10b981;
 }
 
 QLabel#errorLabel {
     color: #ef4444;
-    font-size: 13px;
+    font-weight: bold;
 }
 
-QLineEdit, QComboBox, QSpinBox {
+QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {
     padding: 10px 14px;
-    border: 1px solid #d1d5db;
-    border-radius: 6px;
-    background-color: #ffffff;
-    selection-background-color: #3b82f6;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    background-color: #1e293b;
+    color: #f8fafc;
+    selection-background-color: #10b981;
 }
 
-QLineEdit:focus, QComboBox:focus, QSpinBox:focus {
-    border: 1px solid #3b82f6;
-    outline: none;
+QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {
+    border: 1px solid #10b981;
+    background-color: #0f172a;
 }
 
 QPushButton {
-    padding: 10px 18px;
-    background-color: #ffffff;
-    border: 1px solid #d1d5db;
-    border-radius: 6px;
-    color: #374151;
-    font-weight: 500;
+    padding: 10px 20px;
+    background-color: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    color: #f8fafc;
+    font-weight: 600;
 }
 
 QPushButton:hover {
-    background-color: #f3f4f6;
+    background-color: #334155;
+    border: 1px solid #475569;
 }
 
 QPushButton:pressed {
-    background-color: #e5e7eb;
+    background-color: #0f172a;
+    border: 1px solid #10b981;
 }
 
 QPushButton:default, QPushButton#primaryButton {
     background-color: #10b981;
     border: 1px solid #059669;
-    color: white;
+    color: #ffffff;
 }
 
 QPushButton:default:hover, QPushButton#primaryButton:hover {
@@ -107,41 +106,51 @@ QPushButton:default:pressed, QPushButton#primaryButton:pressed {
 }
 
 QPushButton:disabled {
-    background-color: #e5e7eb;
-    border: 1px solid #d1d5db;
-    color: #9ca3af;
+    background-color: #1e293b;
+    border: 1px solid #334155;
+    color: #64748b;
 }
 
-QTableWidget {
-    background-color: #ffffff;
-    border: 1px solid #e5e7eb;
-    border-radius: 6px;
-    gridline-color: #f3f4f6;
-    selection-background-color: #eff6ff;
-    selection-color: #1e3a8a;
+QTableWidget, QListWidget {
+    background-color: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    gridline-color: #334155;
+    selection-background-color: #065f46;
+    selection-color: #ffffff;
     outline: 0;
+    padding: 4px;
+}
+
+QTableWidget::item:hover, QListWidget::item:hover {
+    background-color: #334155;
 }
 
 QHeaderView::section {
-    background-color: #f9fafb;
-    padding: 10px;
+    background-color: #0f172a;
+    padding: 12px;
     border: none;
-    border-bottom: 1px solid #e5e7eb;
-    border-right: 1px solid #e5e7eb;
-    font-weight: 600;
-    color: #4b5563;
+    border-bottom: 2px solid #334155;
+    border-right: 1px solid #334155;
+    font-weight: bold;
+    color: #94a3b8;
+    text-transform: uppercase;
 }
 
 QScrollBar:vertical {
     border: none;
-    background: #f3f4f6;
-    width: 10px;
-    margin: 0px 0px 0px 0px;
+    background: #0f172a;
+    width: 12px;
+    margin: 0px;
 }
 QScrollBar::handle:vertical {
-    background: #d1d5db;
+    background: #334155;
     min-height: 20px;
-    border-radius: 5px;
+    border-radius: 6px;
+    margin: 2px;
+}
+QScrollBar::handle:vertical:hover {
+    background: #475569;
 }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
     height: 0px;
@@ -149,17 +158,57 @@ QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
 
 QScrollBar:horizontal {
     border: none;
-    background: #f3f4f6;
-    height: 10px;
-    margin: 0px 0px 0px 0px;
+    background: #0f172a;
+    height: 12px;
+    margin: 0px;
 }
 QScrollBar::handle:horizontal {
-    background: #d1d5db;
+    background: #334155;
     min-width: 20px;
-    border-radius: 5px;
+    border-radius: 6px;
+    margin: 2px;
+}
+QScrollBar::handle:horizontal:hover {
+    background: #475569;
 }
 QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
     width: 0px;
+}
+
+QMenu {
+    background-color: #1e293b;
+    border: 1px solid #334155;
+    color: #f8fafc;
+    border-radius: 6px;
+}
+
+QMenu::item {
+    padding: 8px 24px 8px 24px;
+}
+
+QMenu::item:selected {
+    background-color: #334155;
+    color: #10b981;
+}
+
+QMenuBar {
+    background-color: #0f172a;
+    border-bottom: 1px solid #334155;
+}
+
+QMenuBar::item {
+    padding: 6px 12px;
+    background: transparent;
+    color: #94a3b8;
+}
+
+QMenuBar::item:selected {
+    background: #1e293b;
+    color: #f8fafc;
+}
+
+QFrame#divider {
+    color: #334155;
 }
 """
 
@@ -238,37 +287,153 @@ class LoginDialog(QDialog):
         super().__init__()
         self.session_factory = session_factory
         self.user: User | None = None
-        self.setWindowTitle("OilMart POS — Sign in")
-        self.setMinimumWidth(400)
-        self.setStyleSheet(MODERN_STYLE)
-        layout = QVBoxLayout(self)
-        layout.setSpacing(16)
-        layout.setContentsMargins(32, 32, 32, 32)
-        title = QLabel("OilMart POS")
-        title.setObjectName("titleLabel")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        subtitle = QLabel("Sign in to start billing")
-        subtitle.setObjectName("subtitleLabel")
-        subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(title)
-        layout.addWidget(subtitle)
-        form = QFormLayout()
-        form.setVerticalSpacing(12)
+        self.setWindowTitle("OilMart POS — Sign In")
+        self.setFixedSize(1000, 650)
+        self.setWindowFlags(self.windowFlags() | Qt.WindowType.CustomizeWindowHint | Qt.WindowType.WindowCloseButtonHint)
+        
+        LIGHT_STYLE = """
+        QDialog { background-color: #f8fafc; }
+        QLabel { color: #1e293b; font-family: 'Inter', 'Segoe UI', sans-serif; }
+        QLineEdit { 
+            padding: 6px 16px; 
+            min-height: 32px;
+            border: 1px solid #cbd5e1; 
+            border-radius: 8px; 
+            background-color: #ffffff; 
+            color: #0f172a; 
+            font-size: 14px;
+        }
+        QLineEdit:focus { border: 1px solid #3b82f6; outline: none; }
+        QPushButton#signInBtn { 
+            background-color: #2563eb; 
+            color: white; 
+            border: none; 
+            border-radius: 8px; 
+            padding: 8px; 
+            min-height: 32px;
+            font-weight: bold; 
+            font-size: 15px; 
+        }
+        QPushButton#signInBtn:hover { background-color: #1d4ed8; }
+        QPushButton#qrBtn {
+            background-color: transparent;
+            color: #475569;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            padding: 8px;
+            min-height: 32px;
+            font-weight: 500;
+        }
+        QPushButton#qrBtn:hover { background-color: #f1f5f9; }
+        QCheckBox { color: #475569; font-weight: 500; }
+        """
+        self.setStyleSheet(LIGHT_STYLE)
+
+        main_layout = QHBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        left_pane = QWidget()
+        left_pane.setStyleSheet("background-color: #ffffff;")
+        left_layout = QVBoxLayout(left_pane)
+        left_layout.setContentsMargins(60, 60, 60, 60)
+        left_layout.setSpacing(16)
+
+        brand = QHBoxLayout()
+        icon = QLabel("💧")
+        icon.setStyleSheet("font-size: 32px;")
+        brand_label = QLabel("OilMart POS")
+        brand_label.setStyleSheet("font-size: 28px; font-weight: 900; color: #0f172a;")
+        brand.addWidget(icon)
+        brand.addWidget(brand_label)
+        brand.addStretch()
+        left_layout.addLayout(brand)
+        
+        left_layout.addSpacing(20)
+        
+        welcome = QLabel("Welcome back!")
+        welcome.setStyleSheet("font-size: 24px; font-weight: bold;")
+        left_layout.addWidget(welcome)
+        sub = QLabel("Sign in to continue to your account")
+        sub.setStyleSheet("color: #64748b; font-size: 14px;")
+        left_layout.addWidget(sub)
+
+        left_layout.addSpacing(10)
+
+        user_label = QLabel("Username")
+        user_label.setStyleSheet("font-size: 13px; font-weight: 600;")
+        left_layout.addWidget(user_label)
         self.username = QLineEdit("admin")
+        self.username.setPlaceholderText("Enter username")
+        left_layout.addWidget(self.username)
+
+        pass_label = QLabel("Password")
+        pass_label.setStyleSheet("font-size: 13px; font-weight: 600;")
+        left_layout.addWidget(pass_label)
         self.password = QLineEdit()
         self.password.setEchoMode(QLineEdit.EchoMode.Password)
-        self.password.setPlaceholderText("Password")
+        self.password.setPlaceholderText("Enter password")
         self.password.returnPressed.connect(self.authenticate)
-        form.addRow("Username", self.username)
-        form.addRow("Password", self.password)
-        layout.addLayout(form)
+        left_layout.addWidget(self.password)
+
+        options_layout = QHBoxLayout()
+        rem_check = QCheckBox("Remember me")
+        rem_check.setChecked(True)
+        options_layout.addWidget(rem_check)
+        forgot_btn = QPushButton("Forgot password?")
+        forgot_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        forgot_btn.setStyleSheet("color: #2563eb; background: transparent; border: none; text-align: right; font-weight: 500;")
+        options_layout.addWidget(forgot_btn, alignment=Qt.AlignmentFlag.AlignRight)
+        left_layout.addLayout(options_layout)
+
         self.error = QLabel("")
-        self.error.setObjectName("errorLabel")
-        layout.addWidget(self.error)
-        button = QPushButton("Sign in")
-        button.setDefault(True)
-        button.clicked.connect(self.authenticate)
-        layout.addWidget(button)
+        self.error.setStyleSheet("color: #ef4444; font-size: 13px; font-weight: 600;")
+        left_layout.addWidget(self.error)
+
+        sign_in = QPushButton("Sign In →")
+        sign_in.setObjectName("signInBtn")
+        sign_in.setCursor(Qt.CursorShape.PointingHandCursor)
+        sign_in.clicked.connect(self.authenticate)
+        left_layout.addWidget(sign_in)
+
+        div_layout = QHBoxLayout()
+        line1 = QFrame(); line1.setFrameShape(QFrame.Shape.HLine); line1.setStyleSheet("color: #e2e8f0;")
+        or_label = QLabel("or"); or_label.setStyleSheet("color: #94a3b8; font-size: 12px;")
+        line2 = QFrame(); line2.setFrameShape(QFrame.Shape.HLine); line2.setStyleSheet("color: #e2e8f0;")
+        div_layout.addWidget(line1); div_layout.addWidget(or_label); div_layout.addWidget(line2)
+        left_layout.addLayout(div_layout)
+
+        qr_btn = QPushButton("Scan QR Code to Login")
+        qr_btn.setObjectName("qrBtn")
+        qr_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        left_layout.addWidget(qr_btn)
+        
+        left_layout.addStretch()
+
+        footer = QHBoxLayout()
+        f1 = QLabel("© 2026 OilMart POS. All rights reserved.")
+        f1.setStyleSheet("color: #94a3b8; font-size: 11px;")
+        f2 = QLabel("Version 1.0.0")
+        f2.setStyleSheet("color: #94a3b8; font-size: 11px;")
+        footer.addWidget(f1); footer.addStretch(); footer.addWidget(f2)
+        left_layout.addLayout(footer)
+
+        right_pane = QLabel()
+        right_pane.setStyleSheet("background-color: #f8fafc;")
+        from PyQt6.QtGui import QPixmap
+        import os
+        img_path = r"C:\Users\gimha\.gemini\antigravity-ide\brain\4342073d-9fca-4e32-8bed-bbb48403916a\pos_promo_graphic_1785783539852.png"
+        if os.path.exists(img_path):
+            pixmap = QPixmap(img_path)
+            scaled = pixmap.scaled(500, 650, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation)
+            right_pane.setPixmap(scaled)
+            right_pane.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        else:
+            right_pane.setText("Manage your business with confidence")
+            right_pane.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        main_layout.addWidget(left_pane, 1)
+        main_layout.addWidget(right_pane, 1)
 
     def authenticate(self):
         with self.session_factory() as session:
@@ -834,8 +999,8 @@ class PosWindow(QMainWindow):
         left.addWidget(add)
 
         divider = QFrame()
+        divider.setObjectName("divider")
         divider.setFrameShape(QFrame.Shape.VLine)
-        divider.setStyleSheet("color: #e5e7eb;")
         right = QVBoxLayout()
         right.setSpacing(12)
         cart_title = QLabel("Current sale")
