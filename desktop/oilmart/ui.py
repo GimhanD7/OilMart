@@ -17,6 +17,149 @@ from .models import Product, Terminal, User
 from .security import verify_password
 from .services import CartLine, CheckoutError, checkout
 
+MODERN_STYLE = """
+QWidget {
+    font-family: 'Segoe UI', 'Inter', sans-serif;
+    font-size: 14px;
+    color: #1f2937;
+    background-color: #f9fafb;
+}
+
+QMainWindow {
+    background-color: #f3f4f6;
+}
+
+QDialog {
+    background-color: #ffffff;
+}
+
+QLabel {
+    background: transparent;
+}
+
+QLabel#titleLabel {
+    font-size: 22px;
+    font-weight: bold;
+    color: #111827;
+}
+
+QLabel#subtitleLabel {
+    font-size: 14px;
+    color: #6b7280;
+}
+
+QLabel#totalLabel {
+    font-size: 24px;
+    font-weight: bold;
+    color: #059669;
+}
+
+QLabel#errorLabel {
+    color: #ef4444;
+    font-size: 13px;
+}
+
+QLineEdit, QComboBox, QSpinBox {
+    padding: 10px 14px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    background-color: #ffffff;
+    selection-background-color: #3b82f6;
+}
+
+QLineEdit:focus, QComboBox:focus, QSpinBox:focus {
+    border: 1px solid #3b82f6;
+    outline: none;
+}
+
+QPushButton {
+    padding: 10px 18px;
+    background-color: #ffffff;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    color: #374151;
+    font-weight: 500;
+}
+
+QPushButton:hover {
+    background-color: #f3f4f6;
+}
+
+QPushButton:pressed {
+    background-color: #e5e7eb;
+}
+
+QPushButton:default, QPushButton#primaryButton {
+    background-color: #10b981;
+    border: 1px solid #059669;
+    color: white;
+}
+
+QPushButton:default:hover, QPushButton#primaryButton:hover {
+    background-color: #059669;
+}
+
+QPushButton:default:pressed, QPushButton#primaryButton:pressed {
+    background-color: #047857;
+}
+
+QPushButton:disabled {
+    background-color: #e5e7eb;
+    border: 1px solid #d1d5db;
+    color: #9ca3af;
+}
+
+QTableWidget {
+    background-color: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    gridline-color: #f3f4f6;
+    selection-background-color: #eff6ff;
+    selection-color: #1e3a8a;
+    outline: 0;
+}
+
+QHeaderView::section {
+    background-color: #f9fafb;
+    padding: 10px;
+    border: none;
+    border-bottom: 1px solid #e5e7eb;
+    border-right: 1px solid #e5e7eb;
+    font-weight: 600;
+    color: #4b5563;
+}
+
+QScrollBar:vertical {
+    border: none;
+    background: #f3f4f6;
+    width: 10px;
+    margin: 0px 0px 0px 0px;
+}
+QScrollBar::handle:vertical {
+    background: #d1d5db;
+    min-height: 20px;
+    border-radius: 5px;
+}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0px;
+}
+
+QScrollBar:horizontal {
+    border: none;
+    background: #f3f4f6;
+    height: 10px;
+    margin: 0px 0px 0px 0px;
+}
+QScrollBar::handle:horizontal {
+    background: #d1d5db;
+    min-width: 20px;
+    border-radius: 5px;
+}
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+    width: 0px;
+}
+"""
+
 
 def money(cents: int) -> str:
     return f"Rs. {cents / 100:,.2f}"
@@ -29,15 +172,20 @@ class LoginDialog(QDialog):
         self.user: User | None = None
         self.setWindowTitle("OilMart POS — Sign in")
         self.setMinimumWidth(400)
+        self.setStyleSheet(MODERN_STYLE)
         layout = QVBoxLayout(self)
+        layout.setSpacing(16)
+        layout.setContentsMargins(32, 32, 32, 32)
         title = QLabel("OilMart POS")
-        title.setFont(QFont("Segoe UI", 22, QFont.Weight.Bold))
+        title.setObjectName("titleLabel")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         subtitle = QLabel("Sign in to start billing")
+        subtitle.setObjectName("subtitleLabel")
         subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
         layout.addWidget(subtitle)
         form = QFormLayout()
+        form.setVerticalSpacing(12)
         self.username = QLineEdit("admin")
         self.password = QLineEdit()
         self.password.setEchoMode(QLineEdit.EchoMode.Password)
@@ -47,7 +195,7 @@ class LoginDialog(QDialog):
         form.addRow("Password", self.password)
         layout.addLayout(form)
         self.error = QLabel("")
-        self.error.setStyleSheet("color: #ef4444")
+        self.error.setObjectName("errorLabel")
         layout.addWidget(self.error)
         button = QPushButton("Sign in")
         button.setDefault(True)
@@ -71,9 +219,13 @@ class PaymentDialog(QDialog):
         super().__init__(parent)
         self.total_cents = total_cents
         self.setWindowTitle("Complete payment")
+        self.setStyleSheet(MODERN_STYLE)
+        self.setMinimumWidth(400)
         form = QFormLayout(self)
+        form.setContentsMargins(24, 24, 24, 24)
+        form.setVerticalSpacing(16)
         total = QLabel(money(total_cents))
-        total.setFont(QFont("Segoe UI", 18, QFont.Weight.Bold))
+        total.setObjectName("totalLabel")
         self.method = QComboBox()
         self.method.addItems(["Cash", "Card", "Credit"])
         self.paid = QLineEdit(f"{total_cents / 100:.2f}")
@@ -121,15 +273,18 @@ class PosWindow(QMainWindow):
         self.cart: dict[int, CartEntry] = {}
         self.setWindowTitle(f"OilMart POS — {user.display_name}")
         self.resize(1200, 760)
+        self.setStyleSheet(MODERN_STYLE)
         self._build_ui()
         self.search_products()
 
     def _build_ui(self):
         central = QWidget()
         root = QVBoxLayout(central)
+        root.setContentsMargins(24, 24, 24, 24)
+        root.setSpacing(20)
         header = QHBoxLayout()
         title = QLabel("OilMart POS")
-        title.setFont(QFont("Segoe UI", 20, QFont.Weight.Bold))
+        title.setObjectName("titleLabel")
         header.addWidget(title)
         header.addStretch()
         header.addWidget(QLabel(f"Cashier: {self.user.display_name}"))
@@ -156,9 +311,11 @@ class PosWindow(QMainWindow):
 
         divider = QFrame()
         divider.setFrameShape(QFrame.Shape.VLine)
+        divider.setStyleSheet("color: #e5e7eb;")
         right = QVBoxLayout()
+        right.setSpacing(12)
         cart_title = QLabel("Current sale")
-        cart_title.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
+        cart_title.setObjectName("titleLabel")
         right.addWidget(cart_title)
         self.cart_table = QTableWidget(0, 4)
         self.cart_table.setHorizontalHeaderLabels(["Item", "Qty", "Price", "Amount"])
@@ -180,9 +337,10 @@ class PosWindow(QMainWindow):
         right.addLayout(controls)
         self.total = QLabel("Total: Rs. 0.00")
         self.total.setAlignment(Qt.AlignmentFlag.AlignRight)
-        self.total.setFont(QFont("Segoe UI", 22, QFont.Weight.Bold))
+        self.total.setObjectName("totalLabel")
         right.addWidget(self.total)
         self.checkout_button = QPushButton("PAY / COMPLETE SALE")
+        self.checkout_button.setObjectName("primaryButton")
         self.checkout_button.setMinimumHeight(52)
         self.checkout_button.setEnabled(False)
         self.checkout_button.clicked.connect(self.complete_sale)
@@ -197,13 +355,6 @@ class PosWindow(QMainWindow):
         exit_action = QAction("Exit", self)
         exit_action.triggered.connect(QApplication.instance().quit)
         self.menuBar().addMenu("File").addAction(exit_action)
-        self.setStyleSheet("""
-            QWidget { font-family: 'Segoe UI'; font-size: 14px; }
-            QLineEdit, QComboBox { padding: 9px; }
-            QPushButton { padding: 9px 14px; }
-            QPushButton:default, QPushButton#checkout { background: #16a34a; color: white; }
-            QHeaderView::section { padding: 8px; font-weight: bold; }
-        """)
         self.search.setFocus()
 
     def search_products(self):
