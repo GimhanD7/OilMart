@@ -168,6 +168,71 @@ def money(cents: int) -> str:
     return f"Rs. {cents / 100:,.2f}"
 
 
+class ChangePasswordDialog(QDialog):
+    def __init__(self, parent=None, *, title="Create your new password", temporary=False):
+        super().__init__(parent)
+        self.new_password = ""
+        self.setWindowTitle("Change temporary password")
+        self.setMinimumWidth(480)
+        self.setStyleSheet(MODERN_STYLE)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(28, 28, 28, 28)
+        layout.setSpacing(14)
+        heading = QLabel(title)
+        heading.setObjectName("titleLabel")
+        layout.addWidget(heading)
+        instructions = QLabel(
+            (("The user will be required to change this password at first login.\n" if temporary else
+              "Your temporary password must be changed before continuing.\n")) +
+            "Use at least 5 characters, including an upper-case letter, "
+            "a lower-case letter, and a number."
+        )
+        instructions.setWordWrap(True)
+        layout.addWidget(instructions)
+        form = QFormLayout()
+        self.password = QLineEdit()
+        self.password.setEchoMode(QLineEdit.EchoMode.Password)
+        self.password.setPlaceholderText("New password")
+        self.confirm = QLineEdit()
+        self.confirm.setEchoMode(QLineEdit.EchoMode.Password)
+        self.confirm.setPlaceholderText("Enter the same password again")
+        self.confirm.returnPressed.connect(self.validate)
+        form.addRow("Temporary password" if temporary else "New password", self.password)
+        form.addRow("Re-enter password", self.confirm)
+        layout.addLayout(form)
+        self.error = QLabel("")
+        self.error.setObjectName("errorLabel")
+        self.error.setWordWrap(True)
+        layout.addWidget(self.error)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Cancel | QDialogButtonBox.StandardButton.Ok
+        )
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Change password")
+        buttons.accepted.connect(self.validate)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+        self.password.setFocus()
+
+    def validate(self):
+        password = self.password.text()
+        if len(password) < 5:
+            self.error.setText("Password must contain at least 5 characters.")
+        elif not any(char.isupper() for char in password):
+            self.error.setText("Add at least one upper-case letter.")
+        elif not any(char.islower() for char in password):
+            self.error.setText("Add at least one lower-case letter.")
+        elif not any(char.isdigit() for char in password):
+            self.error.setText("Add at least one number.")
+        elif password != self.confirm.text():
+            self.error.setText("The two passwords do not match.")
+        else:
+            self.new_password = password
+            self.accept()
+            return
+        self.password.selectAll()
+        self.password.setFocus()
+
+
 class LoginDialog(QDialog):
     def __init__(self, session_factory):
         super().__init__()
@@ -213,16 +278,12 @@ class LoginDialog(QDialog):
                 self.password.selectAll()
                 return
             if user.must_change_password:
-                new_password, ok = QInputDialog.getText(
-                    self, "Change temporary password",
-                    "Create a new password (12+ characters, upper/lower-case and number):",
-                    QLineEdit.EchoMode.Password,
-                )
-                if not ok:
+                password_dialog = ChangePasswordDialog(self)
+                if password_dialog.exec() != QDialog.DialogCode.Accepted:
                     self.error.setText("You must change the temporary administrator password")
                     return
                 try:
-                    change_password(session, user, self.password.text(), new_password)
+                    change_password(session, user, self.password.text(), password_dialog.new_password)
                 except ValueError as exc:
                     self.error.setText(str(exc))
                     return
@@ -375,6 +436,170 @@ class ReceiptDialog(QDialog):
         QMessageBox.information(self, "Printed", "Receipt sent to the thermal printer.")
 
 
+class UserManagementDialog(QDialog):
+    def __init__(self, session_factory, current_user: User, parent=None):
+        super().__init__(parent)
+        self.session_factory = session_factory
+        self.current_user = current_user
+        self.setWindowTitle("User Management")
+        self.setMinimumSize(900, 560)
+        self.setStyleSheet(MODERN_STYLE)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 24, 24, 24)
+        title = QLabel("All Users")
+        title.setObjectName("titleLabel")
+        layout.addWidget(title)
+        subtitle = QLabel("Create accounts, assign roles, and control login access.")
+        subtitle.setObjectName("subtitleLabel")
+        layout.addWidget(subtitle)
+        self.table = QTableWidget(0, 6)
+        self.table.setHorizontalHeaderLabels(
+            ["Username", "Display name", "Role", "Branch", "Status", "Password"]
+        )
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        layout.addWidget(self.table)
+        controls = QHBoxLayout()
+        add = QPushButton("Add user")
+        add.setObjectName("primaryButton")
+        add.clicked.connect(self.add_user)
+        role = QPushButton("Change role")
+        role.clicked.connect(self.change_role)
+        status = QPushButton("Enable / disable")
+        status.clicked.connect(self.toggle_status)
+        reset = QPushButton("Reset password")
+        reset.clicked.connect(self.reset_password)
+        close = QPushButton("Close")
+        close.clicked.connect(self.accept)
+        for button in (add, role, status, reset):
+            controls.addWidget(button)
+        controls.addStretch()
+        controls.addWidget(close)
+        layout.addLayout(controls)
+        self.refresh()
+
+    def refresh(self):
+        with self.session_factory() as session:
+            rows = session.execute(
+                select(User, Role.name, Branch.name)
+                .join(Role, Role.id == User.role_id)
+                .join(Branch, Branch.id == User.branch_id)
+                .order_by(User.username)
+            ).all()
+        self.table.setRowCount(len(rows))
+        for row_number, (user, role_name, branch_name) in enumerate(rows):
+            values = (
+                user.username, user.display_name, role_name, branch_name,
+                "Active" if user.active else "Disabled",
+                "Change required" if user.must_change_password else "Configured",
+            )
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                if column == 0:
+                    item.setData(Qt.ItemDataRole.UserRole, user.id)
+                self.table.setItem(row_number, column, item)
+
+    def selected_user_id(self) -> int | None:
+        row = self.table.currentRow()
+        return None if row < 0 else self.table.item(row, 0).data(Qt.ItemDataRole.UserRole)
+
+    def _temporary_password(self, title: str) -> str | None:
+        dialog = ChangePasswordDialog(self, title=title, temporary=True)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return None
+        return dialog.new_password
+
+    def add_user(self):
+        username, ok = QInputDialog.getText(self, "Add user", "Username:")
+        if not ok or not username.strip():
+            return
+        display_name, ok = QInputDialog.getText(self, "Add user", "Display name:")
+        if not ok or not display_name.strip():
+            return
+        with self.session_factory() as session:
+            roles = session.scalars(select(Role).order_by(Role.name)).all()
+        role_name, ok = QInputDialog.getItem(self, "Add user", "Role:", [r.name for r in roles], 0, False)
+        if not ok:
+            return
+        password = self._temporary_password("Add user")
+        if password is None:
+            return
+        role = next(r for r in roles if r.name == role_name)
+        with self.session_factory() as session:
+            user = User(username=username.strip(), display_name=display_name.strip(),
+                        password_hash=hash_password(password), role_id=role.id,
+                        branch_id=self.current_user.branch_id, must_change_password=True)
+            session.add(user)
+            try:
+                session.flush()
+                session.add(ActivityLog(user_id=self.current_user.id, action="created user",
+                    module="administration", details=f"{user.username} ({role.name})"))
+                session.commit()
+            except Exception:
+                session.rollback()
+                QMessageBox.warning(self, "Cannot create user", "That username may already be in use.")
+                return
+        self.refresh()
+
+    def change_role(self):
+        user_id = self.selected_user_id()
+        if user_id is None:
+            QMessageBox.information(self, "Select user", "Select a user first.")
+            return
+        with self.session_factory() as session:
+            user = session.get(User, user_id)
+            roles = session.scalars(select(Role).order_by(Role.name)).all()
+            current = next((i for i, role in enumerate(roles) if role.id == user.role_id), 0)
+            role_name, ok = QInputDialog.getItem(
+                self, "Change role", f"Role for {user.username}:", [r.name for r in roles], current, False
+            )
+            if not ok:
+                return
+            role = next(r for r in roles if r.name == role_name)
+            user.role_id = role.id
+            session.add(ActivityLog(user_id=self.current_user.id, action="changed user role",
+                module="administration", details=f"{user.username}: {role.name}"))
+            session.commit()
+        self.refresh()
+
+    def toggle_status(self):
+        user_id = self.selected_user_id()
+        if user_id is None:
+            QMessageBox.information(self, "Select user", "Select a user first.")
+            return
+        if user_id == self.current_user.id:
+            QMessageBox.warning(self, "Not allowed", "You cannot disable your own account.")
+            return
+        with self.session_factory() as session:
+            user = session.get(User, user_id)
+            user.active = not user.active
+            session.add(ActivityLog(user_id=self.current_user.id, action="enabled user" if user.active else "disabled user",
+                                    module="administration", details=user.username))
+            session.commit()
+        self.refresh()
+
+    def reset_password(self):
+        user_id = self.selected_user_id()
+        if user_id is None:
+            QMessageBox.information(self, "Select user", "Select a user first.")
+            return
+        password = self._temporary_password("Reset password")
+        if password is None:
+            return
+        with self.session_factory() as session:
+            user = session.get(User, user_id)
+            user.password_hash = hash_password(password)
+            user.must_change_password = True
+            user.failed_login_attempts = 0
+            user.locked_until = None
+            session.add(ActivityLog(user_id=self.current_user.id, action="reset user password",
+                                    module="administration", details=user.username))
+            session.commit()
+        self.refresh()
+        QMessageBox.information(self, "Password reset", "The user must change this password at next login.")
+
+
 class AdminDialog(QDialog):
     def __init__(self, session_factory, current_user: User, parent=None):
         super().__init__(parent)
@@ -492,14 +717,10 @@ class AdminDialog(QDialog):
         role_name, ok = QInputDialog.getItem(self, "New user", "Role:", role_names, 0, False)
         if not ok:
             return
-        password, ok = QInputDialog.getText(
-            self, "New user", "Temporary password (12+ characters):", QLineEdit.EchoMode.Password
-        )
-        if not ok:
+        password_dialog = ChangePasswordDialog(self, title="Create temporary password", temporary=True)
+        if password_dialog.exec() != QDialog.DialogCode.Accepted:
             return
-        if len(password) < 12:
-            QMessageBox.warning(self, "Invalid password", "Temporary password must contain at least 12 characters.")
-            return
+        password = password_dialog.new_password
         role = next(role for role in self.roles_data if role.name == role_name)
         with self.session_factory() as session:
             user = User(username=username.strip(), display_name=display_name.strip(),
@@ -580,6 +801,10 @@ class PosWindow(QMainWindow):
             admin_btn = QPushButton("Administration")
             admin_btn.clicked.connect(self._open_admin)
             header.addWidget(admin_btn)
+        if "user.create" in self.permissions or "user.edit" in self.permissions:
+            users_btn = QPushButton("Users")
+            users_btn.clicked.connect(self._open_users)
+            header.addWidget(users_btn)
         self.shift_button = QPushButton("Open shift")
         self.shift_button.clicked.connect(self.close_current_shift)
         self.shift_button.setVisible("sales.create" in self.permissions)
@@ -685,6 +910,10 @@ class PosWindow(QMainWindow):
 
     def _open_admin(self):
         dialog = AdminDialog(self.session_factory, self.user, self)
+        dialog.exec()
+
+    def _open_users(self):
+        dialog = UserManagementDialog(self.session_factory, self.user, self)
         dialog.exec()
 
     def ensure_shift(self) -> bool:

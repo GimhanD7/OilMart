@@ -62,8 +62,8 @@ def authenticate(session, username: str, password: str, *, now: datetime | None 
 def change_password(session, user: User, current_password: str, new_password: str) -> None:
     if not verify_password(current_password, user.password_hash):
         raise ValueError("Current password is incorrect")
-    if len(new_password) < 12 or not any(c.isupper() for c in new_password) or not any(c.islower() for c in new_password) or not any(c.isdigit() for c in new_password):
-        raise ValueError("Use at least 12 characters with upper-case, lower-case, and a number")
+    if len(new_password) < 5 or not any(c.isupper() for c in new_password) or not any(c.islower() for c in new_password) or not any(c.isdigit() for c in new_password):
+        raise ValueError("Use at least 5 characters with upper-case, lower-case, and a number")
     if new_password == current_password:
         raise ValueError("New password must be different")
     user.password_hash = hash_password(new_password)
