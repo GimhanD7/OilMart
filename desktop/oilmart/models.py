@@ -69,6 +69,9 @@ class User(Base):
     role_id: Mapped[int] = mapped_column(ForeignKey("roles.id"))
     branch_id: Mapped[int] = mapped_column(ForeignKey("branches.id"))
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    failed_login_attempts: Mapped[int] = mapped_column(Integer, default=0)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    must_change_password: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class Product(Base):
@@ -115,6 +118,7 @@ class Invoice(Base):
     branch_id: Mapped[int] = mapped_column(ForeignKey("branches.id"))
     terminal_id: Mapped[int] = mapped_column(ForeignKey("terminals.id"))
     cashier_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    shift_id: Mapped[int | None] = mapped_column(ForeignKey("shifts.id"), nullable=True)
     customer_id: Mapped[int | None] = mapped_column(ForeignKey("customers.id"), nullable=True)
     subtotal_cents: Mapped[int] = mapped_column(Integer)
     discount_cents: Mapped[int] = mapped_column(Integer, default=0)
@@ -192,4 +196,5 @@ class BillSetting(Base):
     show_tax: Mapped[bool] = mapped_column(Boolean, default=True)
     show_discount: Mapped[bool] = mapped_column(Boolean, default=True)
     copies: Mapped[int] = mapped_column(Integer, default=1)
-
+    printer_name: Mapped[str] = mapped_column(String(255), default="")
+    auto_print: Mapped[bool] = mapped_column(Boolean, default=False)

@@ -25,10 +25,41 @@ def _performance_indexes(connection: Connection) -> None:
         connection.execute(text(statement))
 
 
+def _receipt_printer_settings(connection: Connection) -> None:
+    columns = {row[1] for row in connection.execute(text("PRAGMA table_info(bill_settings)"))}
+    if "printer_name" not in columns:
+        connection.execute(text("ALTER TABLE bill_settings ADD COLUMN printer_name VARCHAR(255) NOT NULL DEFAULT ''"))
+    if "auto_print" not in columns:
+        connection.execute(text("ALTER TABLE bill_settings ADD COLUMN auto_print BOOLEAN NOT NULL DEFAULT 0"))
+
+
+def _invoice_shift_link(connection: Connection) -> None:
+    columns = {row[1] for row in connection.execute(text("PRAGMA table_info(invoices)"))}
+    if "shift_id" not in columns:
+        connection.execute(text("ALTER TABLE invoices ADD COLUMN shift_id INTEGER REFERENCES shifts(id)"))
+    connection.execute(text(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ux_shifts_terminal_open "
+        "ON shifts(terminal_id) WHERE closed_at IS NULL"
+    ))
+
+
+def _login_security(connection: Connection) -> None:
+    columns = {row[1] for row in connection.execute(text("PRAGMA table_info(users)"))}
+    if "failed_login_attempts" not in columns:
+        connection.execute(text("ALTER TABLE users ADD COLUMN failed_login_attempts INTEGER NOT NULL DEFAULT 0"))
+    if "locked_until" not in columns:
+        connection.execute(text("ALTER TABLE users ADD COLUMN locked_until DATETIME"))
+    if "must_change_password" not in columns:
+        connection.execute(text("ALTER TABLE users ADD COLUMN must_change_password BOOLEAN NOT NULL DEFAULT 0"))
+
+
 # Append new migrations here. Released migrations must never be edited.
 MIGRATIONS: tuple[Migration, ...] = (
     (1, "initial_schema", _initial_schema),
     (2, "performance_indexes", _performance_indexes),
+    (3, "receipt_printer_settings", _receipt_printer_settings),
+    (4, "invoice_shift_link", _invoice_shift_link),
+    (5, "login_security", _login_security),
 )
 
 

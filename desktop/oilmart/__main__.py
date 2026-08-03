@@ -20,6 +20,9 @@ def main():
         return
     window = PosWindow(factory, login.user)
     window.show()
+    if not window.ensure_shift():
+        window.close()
+        return 0
     return app.exec()
 
 

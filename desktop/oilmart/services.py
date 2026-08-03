@@ -7,7 +7,9 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .models import ActivityLog, InventoryMovement, Invoice, Payment, Product, SaleItem, SyncOutbox, Terminal
+from .models import ActivityLog, Customer, InventoryMovement, Invoice, Payment, Product, SaleItem, SyncOutbox, Terminal
+from .models import User
+from .security import require_permission
 
 
 class CheckoutError(ValueError):
@@ -18,6 +20,31 @@ class CheckoutError(ValueError):
 class CartLine:
     product_id: int
     quantity: int
+
+
+def create_customer(session: Session, *, user_id: int, name: str, phone: str = "",
+                    credit_limit_cents: int = 0) -> Customer:
+    user = session.get(User, user_id)
+    if user is None:
+        raise ValueError("User does not exist")
+    require_permission(session, user, "customer.add")
+    name = name.strip()
+    phone = phone.strip()
+    if not name:
+        raise ValueError("Customer name is required")
+    if credit_limit_cents < 0:
+        raise ValueError("Credit limit cannot be negative")
+    customer = Customer(name=name, phone=phone, credit_limit_cents=credit_limit_cents)
+    session.add(customer)
+    session.flush()
+    session.add(SyncOutbox(aggregate_type="customer", aggregate_uuid=customer.uuid,
+        payload_json=json.dumps({"uuid": customer.uuid, "name": name, "phone": phone,
+                                 "credit_limit_cents": credit_limit_cents,
+                                 "credit_balance_cents": 0}, separators=(",", ":"))))
+    session.add(ActivityLog(user_id=user_id, action="created customer", module="customers",
+                            details=customer.uuid))
+    session.commit()
+    return customer
 
 
 def _invoice_payload(invoice: Invoice) -> str:
@@ -42,13 +69,22 @@ def _invoice_payload(invoice: Invoice) -> str:
 
 def checkout(session: Session, *, terminal_id: int, cashier_id: int, lines: list[CartLine],
              payment_method: str, paid_cents: int, discount_cents: int = 0, tax_cents: int = 0,
-             customer_id: int | None = None, now: datetime | None = None) -> Invoice:
+             customer_id: int | None = None, shift_id: int | None = None,
+             now: datetime | None = None) -> Invoice:
     if not lines or any(line.quantity <= 0 for line in lines):
         raise CheckoutError("Cart must contain positive quantities")
     if payment_method not in {"cash", "card", "credit"}:
         raise CheckoutError("Unsupported payment method")
     now = now or datetime.now(timezone.utc)
     try:
+        cashier = session.get(User, cashier_id)
+        if cashier is None:
+            raise CheckoutError("Cashier does not exist")
+        require_permission(session, cashier, "sales.create")
+        if discount_cents or tax_cents:
+            require_permission(session, cashier, "sales.edit")
+        if payment_method == "credit":
+            require_permission(session, cashier, "customer.credit")
         terminal = session.execute(select(Terminal).where(Terminal.id == terminal_id).with_for_update()).scalar_one()
         merged: dict[int, int] = {}
         for line in lines:
@@ -65,10 +101,20 @@ def checkout(session: Session, *, terminal_id: int, cashier_id: int, lines: list
             raise CheckoutError("Invalid totals")
         if payment_method != "credit" and paid_cents < total:
             raise CheckoutError("Payment is less than total")
+        customer = session.get(Customer, customer_id) if customer_id is not None else None
+        if payment_method == "credit":
+            if customer is None:
+                raise CheckoutError("Select a customer for a credit sale")
+            new_balance = customer.credit_balance_cents + total
+            if new_balance > customer.credit_limit_cents:
+                available = max(0, customer.credit_limit_cents - customer.credit_balance_cents)
+                raise CheckoutError(f"Customer credit limit exceeded; available credit is {available / 100:,.2f}")
+            customer.credit_balance_cents = new_balance
         local_number = f"TEMP-{terminal.code}-{terminal.next_invoice_sequence:06d}"
         terminal.next_invoice_sequence += 1
         invoice = Invoice(local_invoice_number=local_number, branch_id=terminal.branch_id,
                           terminal_id=terminal.id, cashier_id=cashier_id, customer_id=customer_id,
+                          shift_id=shift_id,
                           subtotal_cents=subtotal, discount_cents=discount_cents, tax_cents=tax_cents,
                           total_cents=total, payment_method=payment_method, created_at=now)
         session.add(invoice)
@@ -92,4 +138,3 @@ def checkout(session: Session, *, terminal_id: int, cashier_id: int, lines: list
     except Exception:
         session.rollback()
         raise
-
