@@ -21,195 +21,35 @@ from .services import CartLine, CheckoutError, checkout, create_customer
 from .shifts import ShiftError, active_shift, close_shift, open_shift
 
 MODERN_STYLE = """
-QWidget {
-    font-family: 'Inter', 'Segoe UI', sans-serif;
-    font-size: 14px;
-    color: #e2e8f0;
-    background-color: #0f172a;
-}
-
-QMainWindow, QDialog {
-    background-color: #0f172a;
-}
-
-QLabel {
-    background: transparent;
-}
-
-QLabel#titleLabel {
-    font-size: 24px;
-    font-weight: bold;
-    color: #f8fafc;
-}
-
-QLabel#subtitleLabel {
-    font-size: 14px;
-    color: #94a3b8;
-}
-
-QLabel#totalLabel {
-    font-size: 26px;
-    font-weight: bold;
-    color: #10b981;
-}
-
-QLabel#errorLabel {
-    color: #ef4444;
-    font-weight: bold;
-}
-
-QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {
-    padding: 10px 14px;
-    border: 1px solid #334155;
-    border-radius: 8px;
-    background-color: #1e293b;
-    color: #f8fafc;
-    selection-background-color: #10b981;
-}
-
-QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {
-    border: 1px solid #10b981;
-    background-color: #0f172a;
-}
-
-QPushButton {
-    padding: 10px 20px;
-    background-color: #1e293b;
-    border: 1px solid #334155;
-    border-radius: 8px;
-    color: #f8fafc;
-    font-weight: 600;
-}
-
-QPushButton:hover {
-    background-color: #334155;
-    border: 1px solid #475569;
-}
-
-QPushButton:pressed {
-    background-color: #0f172a;
-    border: 1px solid #10b981;
-}
-
-QPushButton:default, QPushButton#primaryButton {
-    background-color: #10b981;
-    border: 1px solid #059669;
-    color: #ffffff;
-}
-
-QPushButton:default:hover, QPushButton#primaryButton:hover {
-    background-color: #059669;
-}
-
-QPushButton:default:pressed, QPushButton#primaryButton:pressed {
-    background-color: #047857;
-}
-
-QPushButton:disabled {
-    background-color: #1e293b;
-    border: 1px solid #334155;
-    color: #64748b;
-}
-
-QTableWidget, QListWidget {
-    background-color: #1e293b;
-    border: 1px solid #334155;
-    border-radius: 8px;
-    gridline-color: #334155;
-    selection-background-color: #065f46;
-    selection-color: #ffffff;
-    outline: 0;
-    padding: 4px;
-}
-
-QTableWidget::item:hover, QListWidget::item:hover {
-    background-color: #334155;
-}
-
-QHeaderView::section {
-    background-color: #0f172a;
-    padding: 12px;
-    border: none;
-    border-bottom: 2px solid #334155;
-    border-right: 1px solid #334155;
-    font-weight: bold;
-    color: #94a3b8;
-    text-transform: uppercase;
-}
-
-QScrollBar:vertical {
-    border: none;
-    background: #0f172a;
-    width: 12px;
-    margin: 0px;
-}
-QScrollBar::handle:vertical {
-    background: #334155;
-    min-height: 20px;
-    border-radius: 6px;
-    margin: 2px;
-}
-QScrollBar::handle:vertical:hover {
-    background: #475569;
-}
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-    height: 0px;
-}
-
-QScrollBar:horizontal {
-    border: none;
-    background: #0f172a;
-    height: 12px;
-    margin: 0px;
-}
-QScrollBar::handle:horizontal {
-    background: #334155;
-    min-width: 20px;
-    border-radius: 6px;
-    margin: 2px;
-}
-QScrollBar::handle:horizontal:hover {
-    background: #475569;
-}
-QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
-    width: 0px;
-}
-
-QMenu {
-    background-color: #1e293b;
-    border: 1px solid #334155;
-    color: #f8fafc;
-    border-radius: 6px;
-}
-
-QMenu::item {
-    padding: 8px 24px 8px 24px;
-}
-
-QMenu::item:selected {
-    background-color: #334155;
-    color: #10b981;
-}
-
-QMenuBar {
-    background-color: #0f172a;
-    border-bottom: 1px solid #334155;
-}
-
-QMenuBar::item {
-    padding: 6px 12px;
-    background: transparent;
-    color: #94a3b8;
-}
-
-QMenuBar::item:selected {
-    background: #1e293b;
-    color: #f8fafc;
-}
-
-QFrame#divider {
-    color: #334155;
-}
+QWidget { font-family: 'Inter', 'Segoe UI', sans-serif; font-size: 13px; color: #1e293b; background-color: #f8fafc; }
+QMainWindow { background-color: #f1f5f9; }
+QDialog { background-color: #ffffff; }
+QLabel { background: transparent; }
+QLabel#titleLabel { font-size: 22px; font-weight: bold; color: #0f172a; }
+QLabel#subtitleLabel { font-size: 13px; color: #64748b; }
+QLabel#totalLabel { font-size: 24px; font-weight: bold; color: #2563eb; }
+QLabel#errorLabel { color: #ef4444; font-size: 13px; font-weight: bold; }
+QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox { padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; background-color: #ffffff; selection-background-color: #2563eb; color: #0f172a; }
+QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus { border: 1px solid #2563eb; outline: none; }
+QPushButton { padding: 8px 16px; background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; color: #334155; font-weight: 500; }
+QPushButton:hover { background-color: #f1f5f9; }
+QPushButton:pressed { background-color: #e2e8f0; }
+QPushButton:default, QPushButton#primaryButton { background-color: #2563eb; border: none; color: white; font-weight: bold; }
+QPushButton:default:hover, QPushButton#primaryButton:hover { background-color: #1d4ed8; }
+QPushButton:default:pressed, QPushButton#primaryButton:pressed { background-color: #1e40af; }
+QPushButton:disabled { background-color: #f1f5f9; border: 1px solid #e2e8f0; color: #94a3b8; }
+QTableWidget, QListWidget { background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; gridline-color: #f1f5f9; selection-background-color: #eff6ff; selection-color: #1e40af; outline: 0; }
+QHeaderView::section { background-color: #f8fafc; padding: 10px; border: none; border-bottom: 1px solid #e2e8f0; font-weight: bold; color: #64748b; }
+QScrollBar:vertical { border: none; background: #f8fafc; width: 10px; margin: 0px; }
+QScrollBar::handle:vertical { background: #cbd5e1; min-height: 20px; border-radius: 5px; }
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }
+QScrollBar:horizontal { border: none; background: #f8fafc; height: 10px; margin: 0px; }
+QScrollBar::handle:horizontal { background: #cbd5e1; min-width: 20px; border-radius: 5px; }
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0px; }
+QMenu { background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; }
+QMenu::item { padding: 6px 20px; }
+QMenu::item:selected { background-color: #f1f5f9; color: #2563eb; }
+QFrame#divider { color: #e2e8f0; }
 """
 
 
@@ -935,7 +775,7 @@ class CartEntry:
     quantity: int = 1
 
 
-class PosWindow(QMainWindow):
+class PosWidget(QWidget):
     def __init__(self, session_factory, user: User):
         super().__init__()
         self.session_factory = session_factory
@@ -946,15 +786,12 @@ class PosWindow(QMainWindow):
         with self.session_factory() as session:
             self.permissions = permission_keys(session, user)
             self.role_name = session.scalar(select(Role.name).where(Role.id == user.role_id)) or "Unknown"
-        self.setWindowTitle(f"OilMart POS — {user.display_name}")
-        self.resize(1200, 760)
         self.setStyleSheet(MODERN_STYLE)
         self._build_ui()
         self.search_products()
 
     def _build_ui(self):
-        central = QWidget()
-        root = QVBoxLayout(central)
+        root = QVBoxLayout(self)
         root.setContentsMargins(24, 24, 24, 24)
         root.setSpacing(20)
         header = QHBoxLayout()
@@ -1065,11 +902,6 @@ class PosWindow(QMainWindow):
         body.addWidget(divider)
         body.addLayout(right, 2)
         root.addLayout(body)
-        self.setCentralWidget(central)
-        self.statusBar().showMessage("Offline mode — ready")
-        exit_action = QAction("Exit", self)
-        exit_action.triggered.connect(QApplication.instance().quit)
-        self.menuBar().addMenu("File").addAction(exit_action)
         self.search.setFocus()
         self.refresh_customers()
 
@@ -1083,7 +915,6 @@ class PosWindow(QMainWindow):
 
     def ensure_shift(self) -> bool:
         if "sales.create" not in self.permissions:
-            self.statusBar().showMessage(f"Signed in as {self.role_name} — sales permission not assigned")
             return True
         with self.session_factory() as session:
             self.terminal_id = session.scalar(select(Terminal.id).where(
@@ -1100,7 +931,6 @@ class PosWindow(QMainWindow):
                     return False
                 self.shift_id = shift.id
                 self.shift_button.setText(f"Close shift #{shift.id}")
-                self.statusBar().showMessage(f"Shift #{shift.id} open — offline mode ready")
                 return True
         amount, ok = QInputDialog.getDouble(self, "Open shift",
             "Count and enter the opening cash amount (Rs.):", 0, 0, 100000000, 2)
@@ -1115,7 +945,6 @@ class PosWindow(QMainWindow):
                 return False
         self.shift_id = shift.id
         self.shift_button.setText(f"Close shift #{shift.id}")
-        self.statusBar().showMessage(f"Shift #{shift.id} opened — offline mode ready")
         return True
 
     def close_current_shift(self):
@@ -1140,7 +969,7 @@ class PosWindow(QMainWindow):
             f"Counted cash: {money(summary.counted_cash_cents)}\n"
             f"Variance: {money(summary.variance_cents)}")
         self.shift_id = None
-        QApplication.instance().quit()
+        self.shift_button.setText("Open shift")
 
     def search_products(self):
         term = self.search.text().strip()

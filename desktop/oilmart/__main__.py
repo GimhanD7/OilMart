@@ -7,7 +7,8 @@ from .seed import seed
 def main():
     try:
         from PyQt6.QtWidgets import QApplication, QDialog
-        from .ui import LoginDialog, PosWindow
+        from .ui import LoginDialog
+        from .dashboard import MainWindow
     except ImportError as exc:
         raise SystemExit("PyQt6 is required. Run: pip install -r desktop/requirements.txt") from exc
     factory = initialize(make_engine())
@@ -18,7 +19,7 @@ def main():
     login = LoginDialog(factory)
     if login.exec() != QDialog.DialogCode.Accepted or login.user is None:
         return
-    window = PosWindow(factory, login.user)
+    window = MainWindow(factory, login.user)
     window.show()
     if not window.ensure_shift():
         window.close()
