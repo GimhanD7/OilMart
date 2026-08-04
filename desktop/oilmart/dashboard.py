@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, timezone
 
 from sqlalchemy import func, select
@@ -18,29 +19,15 @@ from .sales_page import SalesPage
 from .business_pages import DirectoryPage, PurchasesPage
 
 
-STYLE = """
-QMainWindow { background: #f8fafc; color: #0f172a; font-family: 'Inter', 'Segoe UI', sans-serif; }
-QFrame#sidebar, QFrame#topbar, QFrame#card, QFrame#panel { background: #ffffff; }
-QFrame#sidebar { border-right: 1px solid #e2e8f0; }
-QFrame#topbar { border-bottom: 1px solid #e2e8f0; }
-QFrame#card, QFrame#panel { border: 1px solid #e2e8f0; border-radius: 12px; }
-QLabel#brand { font-size: 24px; font-weight: 900; color: #0f172a; }
-QLabel#brandPos { font-size: 24px; font-weight: 900; color: #2563eb; }
-QLabel#title { font-size: 24px; font-weight: 800; color: #0f172a; }
-QLabel#muted { color: #64748b; font-size: 13px; }
-QLabel#metricTitle { color: #64748b; font-weight: 600; font-size: 13px; }
-QLabel#metricValue { font-size: 24px; font-weight: 800; color: #0f172a; }
-QLabel#metricTrend { color: #10b981; font-size: 12px; font-weight: 700; }
-QListWidget { border: 0; outline: 0; background: white; padding: 8px; }
-QListWidget::item { padding: 14px 16px; margin: 4px 0; border-radius: 10px; color: #334155; font-size: 14px; font-weight: 600; }
-QListWidget::item:selected { color: #2563eb; background: #eff6ff; font-weight: 700; }
-QListWidget::item:hover:!selected { background: #f8fafc; }
-QPushButton#logout { color: #ef4444; background: white; border: 1px solid #fee2e2; border-radius: 10px; padding: 12px; text-align: left; font-weight: 600; }
-QPushButton#logout:hover { background: #fef2f2; }
-QTableWidget { background: white; border: 0; gridline-color: #f1f5f9; font-size: 13px; }
-QHeaderView::section { background: white; border: 0; border-bottom: 1px solid #e2e8f0; padding: 12px 8px; color: #64748b; font-weight: 700; font-size: 12px; text-transform: uppercase; }
-QTableWidget::item { padding: 8px; border-bottom: 1px solid #f8fafc; }
-"""
+def _load_dashboard_style() -> str:
+    path = os.path.join(os.path.dirname(__file__), "dashboard_style.qss")
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return f.read()
+    except FileNotFoundError:
+        return ""
+
+STYLE = _load_dashboard_style()
 
 
 ICON_PATHS = {

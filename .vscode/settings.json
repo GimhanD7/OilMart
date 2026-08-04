@@ -1,5 +1,7 @@
 {
   "python.pyrefly.disableTypeErrors": true,
+  "python.pyrefly.typeCheckingMode": "off",
+  "python.pyrefly.disableLanguageServices": true,
   "python.pyrefly.syncNotebooks": false,
   "python.pyrefly.diagnosticMode": "openFilesOnly",
   "python.defaultInterpreterPath": "${workspaceFolder}\\.venv\\Scripts\\python.exe"

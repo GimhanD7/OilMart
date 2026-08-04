@@ -6,7 +6,7 @@ from datetime import datetime
 from sqlalchemy import or_, select
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QAction, QFont
+from PyQt6.QtGui import QAction, QFont, QPixmap
 from PyQt6.QtWidgets import (
     QAbstractItemView, QApplication, QComboBox, QDialog, QDialogButtonBox,
     QFormLayout, QFrame, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
@@ -111,42 +111,15 @@ class LoginDialog(QDialog):
         self.setFixedSize(1000, 650)
         self.setWindowFlags(self.windowFlags() | Qt.WindowType.CustomizeWindowHint | Qt.WindowType.WindowCloseButtonHint)
         
-        LIGHT_STYLE = """
-        QDialog { background-color: #f8fafc; }
-        QLabel { color: #1e293b; font-family: 'Inter', 'Segoe UI', sans-serif; }
-        QLineEdit { 
-            padding: 6px 16px; 
-            min-height: 32px;
-            border: 1px solid #cbd5e1; 
-            border-radius: 8px; 
-            background-color: #ffffff; 
-            color: #0f172a; 
-            font-size: 14px;
-        }
-        QLineEdit:focus { border: 1px solid #3b82f6; outline: none; }
-        QPushButton#signInBtn { 
-            background-color: #2563eb; 
-            color: white; 
-            border: none; 
-            border-radius: 8px; 
-            padding: 8px; 
-            min-height: 32px;
-            font-weight: bold; 
-            font-size: 15px; 
-        }
-        QPushButton#signInBtn:hover { background-color: #1d4ed8; }
-        QPushButton#qrBtn {
-            background-color: transparent;
-            color: #475569;
-            border: 1px solid #cbd5e1;
-            border-radius: 8px;
-            padding: 8px;
-            min-height: 32px;
-            font-weight: 500;
-        }
-        QPushButton#qrBtn:hover { background-color: #f1f5f9; }
-        QCheckBox { color: #475569; font-weight: 500; }
-        """
+        def _load_light_style() -> str:
+            path = os.path.join(os.path.dirname(__file__), "light_style.qss")
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    return f.read()
+            except FileNotFoundError:
+                return ""
+        
+        LIGHT_STYLE = _load_light_style()
         self.setStyleSheet(LIGHT_STYLE)
 
         main_layout = QHBoxLayout(self)
@@ -240,9 +213,7 @@ class LoginDialog(QDialog):
 
         right_pane = QLabel()
         right_pane.setStyleSheet("background-color: #f8fafc;")
-        from PyQt6.QtGui import QPixmap
-        import os
-        img_path = r"C:\Users\gimha\.gemini\antigravity-ide\brain\4342073d-9fca-4e32-8bed-bbb48403916a\pos_promo_graphic_1785783539852.png"
+        img_path = os.path.join(os.path.dirname(__file__), "assets", "login-promo.png")
         if os.path.exists(img_path):
             pixmap = QPixmap(img_path)
             scaled = pixmap.scaled(500, 650, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation)
