@@ -17,6 +17,7 @@ from .ui import AdminDialog, PosWidget, UserManagementDialog, money
 from .products_page import ProductsPage
 from .sales_page import SalesPage
 from .business_pages import DirectoryPage, PurchasesPage
+from .admin_pages import ReportsPage, SettingsPage, UsersPage
 
 
 def _load_dashboard_style() -> str:
@@ -335,8 +336,12 @@ class MainWindow(QMainWindow):
         self.purchases_view = PurchasesPage(session_factory, user)
         self.customers_view = DirectoryPage(session_factory, user, "customer")
         self.suppliers_view = DirectoryPage(session_factory, user, "supplier")
+        self.reports_view = ReportsPage(session_factory, user)
+        self.users_view = UsersPage(session_factory, user)
+        self.settings_view = SettingsPage(session_factory, user)
         for page in (self.dashboard_view, self.pos_view, self.products_view, self.sales_view,
-                     self.purchases_view, self.customers_view, self.suppliers_view):
+                     self.purchases_view, self.customers_view, self.suppliers_view,
+                     self.reports_view, self.users_view, self.settings_view):
             self.stack.addWidget(page)
         content.addWidget(self.stack); root.addLayout(content, 1); self.setCentralWidget(root_widget)
         self.nav.setCurrentRow(0)
@@ -365,12 +370,12 @@ class MainWindow(QMainWindow):
             self.customers_view.reload_groups(); self.customers_view.refresh(); self.stack.setCurrentWidget(self.customers_view)
         elif page == "Suppliers":
             self.suppliers_view.reload_groups(); self.suppliers_view.refresh(); self.stack.setCurrentWidget(self.suppliers_view)
+        elif page == "Reports":
+            self.reports_view.refresh(); self.stack.setCurrentWidget(self.reports_view)
         elif page == "Users":
-            UserManagementDialog(self.session_factory, self.user, self).exec()
-            self.nav.setCurrentRow(self.pages.index("Dashboard"))
+            self.users_view.refresh(); self.stack.setCurrentWidget(self.users_view)
         elif page == "Settings":
-            AdminDialog(self.session_factory, self.user, self).exec()
-            self.nav.setCurrentRow(self.pages.index("Dashboard"))
+            self.stack.setCurrentWidget(self.settings_view)
         else:
             QMessageBox.information(self, page, f"{page} workflow will be added in the next desktop milestone.")
             self.nav.setCurrentRow(self.pages.index("Dashboard"))

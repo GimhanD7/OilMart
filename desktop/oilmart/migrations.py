@@ -100,6 +100,24 @@ def _business_partners_and_purchases(connection: Connection) -> None:
     connection.execute(text("CREATE INDEX IF NOT EXISTS ix_purchases_supplier_date ON purchases(supplier_id, purchased_at)"))
 
 
+def _administration_pages(connection: Connection) -> None:
+    branch_columns = {row[1] for row in connection.execute(text("PRAGMA table_info(branches)"))}
+    for name, definition in {
+        "email": "VARCHAR(160) NOT NULL DEFAULT ''", "alternate_phone": "VARCHAR(30) NOT NULL DEFAULT ''",
+        "city": "VARCHAR(80) NOT NULL DEFAULT ''", "postal_code": "VARCHAR(20) NOT NULL DEFAULT ''",
+        "tax_number": "VARCHAR(60) NOT NULL DEFAULT ''", "gst_number": "VARCHAR(60) NOT NULL DEFAULT ''",
+        "logo_path": "VARCHAR(500) NOT NULL DEFAULT ''",
+    }.items():
+        if name not in branch_columns:
+            connection.execute(text(f"ALTER TABLE branches ADD COLUMN {name} {definition}"))
+    user_columns = {row[1] for row in connection.execute(text("PRAGMA table_info(users)"))}
+    for name, definition in {"email": "VARCHAR(160) NOT NULL DEFAULT ''", "phone": "VARCHAR(30) NOT NULL DEFAULT ''", "last_login_at": "DATETIME"}.items():
+        if name not in user_columns:
+            connection.execute(text(f"ALTER TABLE users ADD COLUMN {name} {definition}"))
+    Base.metadata.tables["system_settings"].create(connection, checkfirst=True)
+    Base.metadata.tables["expenses"].create(connection, checkfirst=True)
+
+
 # Append new migrations here. Released migrations must never be edited.
 MIGRATIONS: tuple[Migration, ...] = (
     (1, "initial_schema", _initial_schema),
@@ -111,6 +129,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     (7, "product_catalog_fields", _product_catalog_fields),
     (8, "invoice_status", _invoice_status),
     (9, "business_partners_and_purchases", _business_partners_and_purchases),
+    (10, "administration_pages", _administration_pages),
 )
 
 

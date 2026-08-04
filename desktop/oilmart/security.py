@@ -54,6 +54,7 @@ def authenticate(session, username: str, password: str, *, now: datetime | None 
         return None, message
     user.failed_login_attempts = 0
     user.locked_until = None
+    user.last_login_at = now
     session.add(ActivityLog(user_id=user.id, action="login", module="security"))
     session.commit()
     return user, ""

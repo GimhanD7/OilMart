@@ -29,6 +29,13 @@ class Branch(Base):
     name: Mapped[str] = mapped_column(String(120))
     address: Mapped[str] = mapped_column(String(255), default="")
     phone: Mapped[str] = mapped_column(String(30), default="")
+    email: Mapped[str] = mapped_column(String(160), default="")
+    alternate_phone: Mapped[str] = mapped_column(String(30), default="")
+    city: Mapped[str] = mapped_column(String(80), default="")
+    postal_code: Mapped[str] = mapped_column(String(20), default="")
+    tax_number: Mapped[str] = mapped_column(String(60), default="")
+    gst_number: Mapped[str] = mapped_column(String(60), default="")
+    logo_path: Mapped[str] = mapped_column(String(500), default="")
     active: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
@@ -66,6 +73,9 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(80), unique=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     display_name: Mapped[str] = mapped_column(String(120))
+    email: Mapped[str] = mapped_column(String(160), default="")
+    phone: Mapped[str] = mapped_column(String(30), default="")
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     role_id: Mapped[int] = mapped_column(ForeignKey("roles.id"))
     branch_id: Mapped[int] = mapped_column(ForeignKey("branches.id"))
     active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -259,3 +269,20 @@ class BillSetting(Base):
     copies: Mapped[int] = mapped_column(Integer, default=1)
     printer_name: Mapped[str] = mapped_column(String(255), default="")
     auto_print: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class SystemSetting(Base):
+    __tablename__ = "system_settings"
+    key: Mapped[str] = mapped_column(String(100), primary_key=True)
+    value: Mapped[str] = mapped_column(Text, default="")
+
+
+class Expense(Base):
+    __tablename__ = "expenses"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    branch_id: Mapped[int] = mapped_column(ForeignKey("branches.id"))
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    category: Mapped[str] = mapped_column(String(100), default="General")
+    description: Mapped[str] = mapped_column(String(255), default="")
+    amount_cents: Mapped[int] = mapped_column(Integer)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

@@ -182,14 +182,21 @@ class NewPurchaseDialog(QDialog):
 class PurchasesPage(QWidget):
     def __init__(self, session_factory, user, parent=None):
         super().__init__(parent); self.session_factory = session_factory; self.user = user
-        root = QVBoxLayout(self); root.setContentsMargins(20, 16, 20, 18); heading = QHBoxLayout(); heading.addWidget(named(QLabel("Purchases"), "title")); heading.addWidget(named(QLabel("Manage supplier invoices and incoming stock"), "muted")); heading.addStretch(); add = QPushButton("+ New Purchase"); add.setObjectName("primaryButton"); add.clicked.connect(self.new_purchase); export = QPushButton("Export"); export.clicked.connect(self.export_csv); heading.addWidget(add); heading.addWidget(export); root.addLayout(heading)
-        self.metrics = QGridLayout(); root.addLayout(self.metrics); self.search = QLineEdit(); self.search.setPlaceholderText("Search purchase by invoice or supplier..."); self.search.textChanged.connect(self.refresh); root.addWidget(self.search)
-        self.table = QTableWidget(0, 8); self.table.setHorizontalHeaderLabels(["#", "Invoice No", "Supplier", "Date", "Items", "Total", "Paid / Due", "Status"]); self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch); root.addWidget(self.table, 1); self.result = QLabel(); root.addWidget(self.result); self.refresh()
+        root = QVBoxLayout(self); root.setContentsMargins(20, 16, 20, 18); heading = QHBoxLayout(); heading.addWidget(named(QLabel("Purchases"), "title")); heading.addWidget(named(QLabel("Home  ›  Purchases"), "muted")); heading.addStretch(); add = QPushButton("+ New Purchase"); add.setObjectName("primaryButton"); add.clicked.connect(self.new_purchase); export = QPushButton("Export"); export.clicked.connect(self.export_csv); heading.addWidget(add); heading.addWidget(export); root.addLayout(heading)
+        self.metrics = QGridLayout(); root.addLayout(self.metrics); filters=QHBoxLayout(); self.search = QLineEdit(); self.search.setPlaceholderText("Search purchase by invoice or supplier..."); self.search.textChanged.connect(self.refresh); self.supplier_filter=QComboBox(); self.status_filter=QComboBox(); self.status_filter.addItems(["All Status","Paid","Partial","Due"]); self.status_filter.currentIndexChanged.connect(self.refresh); self.supplier_filter.currentIndexChanged.connect(self.refresh); filters.addWidget(self.search,1); filters.addWidget(self.supplier_filter); filters.addWidget(self.status_filter); root.addLayout(filters)
+        self.table = QTableWidget(0, 9); self.table.setHorizontalHeaderLabels(["#", "Invoice No", "Supplier", "Date", "Items", "Total", "Paid / Due", "Status", "Action"]); self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch); root.addWidget(self.table, 1); self.result = QLabel(); root.addWidget(self.result); self.reload_suppliers(); self.refresh()
+    def reload_suppliers(self):
+        with self.session_factory() as session: suppliers=session.scalars(select(Supplier).order_by(Supplier.name)).all()
+        self.supplier_filter.blockSignals(True); self.supplier_filter.clear(); self.supplier_filter.addItem("All Suppliers",None)
+        for supplier in suppliers:self.supplier_filter.addItem(supplier.name,supplier.id)
+        self.supplier_filter.blockSignals(False)
     def refresh(self):
         if not hasattr(self, "table"): return
         with self.session_factory() as session:
             query = select(Purchase, Supplier.name, func.count(PurchaseItem.id)).join(Supplier).outerjoin(PurchaseItem).group_by(Purchase.id); term = self.search.text().strip()
             if term: query = query.where(or_(Purchase.invoice_number.ilike(f"%{term}%"), Supplier.name.ilike(f"%{term}%")))
+            if self.supplier_filter.currentData(): query=query.where(Purchase.supplier_id==self.supplier_filter.currentData())
+            if self.status_filter.currentIndex(): query=query.where(Purchase.status==self.status_filter.currentText().lower())
             rows = session.execute(query.order_by(Purchase.purchased_at.desc())).all()
         total = sum(p.total_cents for p,_,_ in rows); paid = sum(p.paid_cents for p,_,_ in rows); due = total-paid
         while self.metrics.count():
@@ -200,10 +207,16 @@ class PurchasesPage(QWidget):
         for r,(purchase,supplier,count) in enumerate(rows):
             values=[r+1,purchase.invoice_number,supplier,purchase.purchased_at.strftime("%Y-%m-%d"),count,money(purchase.total_cents),f"{money(purchase.paid_cents)} / {money(purchase.total_cents-purchase.paid_cents)}",purchase.status.title()]
             for c,value in enumerate(values): self.table.setItem(r,c,QTableWidgetItem(str(value)))
+            view=QPushButton("View"); view.clicked.connect(lambda _,i=purchase.id:self.view_purchase(i)); self.table.setCellWidget(r,8,view)
         self.result.setText(f"Showing {len(rows)} purchases")
     def new_purchase(self):
         dialog=NewPurchaseDialog(self.session_factory,self.user,self)
         if dialog.exec()==QDialog.DialogCode.Accepted: self.refresh()
+    def view_purchase(self,purchase_id):
+        with self.session_factory() as session:
+            p=session.get(Purchase,purchase_id); supplier=session.get(Supplier,p.supplier_id); items=session.scalars(select(PurchaseItem).where(PurchaseItem.purchase_id==purchase_id)).all()
+        detail="\n".join(f"{i.product_name}  × {i.quantity}  {money(i.line_total_cents)}" for i in items)
+        QMessageBox.information(self,p.invoice_number,f"Supplier: {supplier.name}\nDate: {p.purchased_at:%Y-%m-%d %H:%M}\nStatus: {p.status.title()}\nTotal: {money(p.total_cents)}\nPaid: {money(p.paid_cents)}\nDue: {money(p.total_cents-p.paid_cents)}\n\nItems\n{detail}")
     def export_csv(self):
         path, _ = QFileDialog.getSaveFileName(self, "Export Purchases", "purchases.csv", "CSV (*.csv)")
         if not path: return
