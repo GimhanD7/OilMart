@@ -81,6 +81,25 @@ def _invoice_status(connection: Connection) -> None:
     connection.execute(text("CREATE INDEX IF NOT EXISTS ix_invoices_status ON invoices(status)"))
 
 
+def _business_partners_and_purchases(connection: Connection) -> None:
+    customer_columns = {row[1] for row in connection.execute(text("PRAGMA table_info(customers)"))}
+    additions = {
+        "email": "VARCHAR(160) NOT NULL DEFAULT ''", "address": "VARCHAR(255) NOT NULL DEFAULT ''",
+        "customer_group": "VARCHAR(80) NOT NULL DEFAULT 'Retail'", "notes": "TEXT NOT NULL DEFAULT ''",
+        "active": "BOOLEAN NOT NULL DEFAULT 1",
+    }
+    for name, definition in additions.items():
+        if name not in customer_columns: connection.execute(text(f"ALTER TABLE customers ADD COLUMN {name} {definition}"))
+    Supplier = Base.metadata.tables["suppliers"]
+    Purchase = Base.metadata.tables["purchases"]
+    PurchaseItem = Base.metadata.tables["purchase_items"]
+    Supplier.create(connection, checkfirst=True); Purchase.create(connection, checkfirst=True); PurchaseItem.create(connection, checkfirst=True)
+    movement_columns = {row[1] for row in connection.execute(text("PRAGMA table_info(inventory_movements)"))}
+    if "purchase_id" not in movement_columns:
+        connection.execute(text("ALTER TABLE inventory_movements ADD COLUMN purchase_id INTEGER REFERENCES purchases(id)"))
+    connection.execute(text("CREATE INDEX IF NOT EXISTS ix_purchases_supplier_date ON purchases(supplier_id, purchased_at)"))
+
+
 # Append new migrations here. Released migrations must never be edited.
 MIGRATIONS: tuple[Migration, ...] = (
     (1, "initial_schema", _initial_schema),
@@ -91,6 +110,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     (6, "product_categories", _product_categories),
     (7, "product_catalog_fields", _product_catalog_fields),
     (8, "invoice_status", _invoice_status),
+    (9, "business_partners_and_purchases", _business_partners_and_purchases),
 )
 
 

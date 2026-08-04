@@ -14,6 +14,7 @@ from .models import Customer, Invoice, Payment, Product, Role, SaleItem, Termina
 from .security import permission_keys
 from .ui import AdminDialog, PosWidget, UserManagementDialog, money
 from .products_page import ProductsPage
+from .sales_page import SalesPage
 
 
 STYLE = """
@@ -267,7 +268,8 @@ class MainWindow(QMainWindow):
         self.stack = QStackedWidget(); self.dashboard_view = DashboardWidget(session_factory)
         self.pos_view = PosWidget(session_factory, user)
         self.products_view = ProductsPage(session_factory, user)
-        self.stack.addWidget(self.dashboard_view); self.stack.addWidget(self.pos_view); self.stack.addWidget(self.products_view)
+        self.sales_view = SalesPage(session_factory, user, self.open_pos_page)
+        self.stack.addWidget(self.dashboard_view); self.stack.addWidget(self.pos_view); self.stack.addWidget(self.products_view); self.stack.addWidget(self.sales_view)
         content.addWidget(self.stack); root.addLayout(content, 1); self.setCentralWidget(root_widget)
         self.nav.setCurrentRow(0)
 
@@ -286,6 +288,9 @@ class MainWindow(QMainWindow):
         elif page == "Products":
             self.products_view.reload_filters(); self.products_view.refresh()
             self.stack.setCurrentWidget(self.products_view)
+        elif page == "Sales":
+            self.sales_view.refresh()
+            self.stack.setCurrentWidget(self.sales_view)
         elif page == "Users":
             UserManagementDialog(self.session_factory, self.user, self).exec()
             self.nav.setCurrentRow(self.pages.index("Dashboard"))
@@ -295,6 +300,10 @@ class MainWindow(QMainWindow):
         else:
             QMessageBox.information(self, page, f"{page} workflow will be added in the next desktop milestone.")
             self.nav.setCurrentRow(self.pages.index("Dashboard"))
+
+    def open_pos_page(self):
+        if "POS" in self.pages:
+            self.nav.setCurrentRow(self.pages.index("POS"))
 
     def ensure_shift(self):
         return True

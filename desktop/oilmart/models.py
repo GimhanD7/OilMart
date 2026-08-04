@@ -103,8 +103,57 @@ class Customer(Base):
     uuid: Mapped[str] = mapped_column(String(36), unique=True, default=lambda: str(uuidlib.uuid4()))
     name: Mapped[str] = mapped_column(String(160))
     phone: Mapped[str] = mapped_column(String(30), default="")
+    email: Mapped[str] = mapped_column(String(160), default="")
+    address: Mapped[str] = mapped_column(String(255), default="")
+    customer_group: Mapped[str] = mapped_column(String(80), default="Retail")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
     credit_limit_cents: Mapped[int] = mapped_column(Integer, default=0)
     credit_balance_cents: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class Supplier(Base):
+    __tablename__ = "suppliers"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), unique=True, default=lambda: str(uuidlib.uuid4()))
+    name: Mapped[str] = mapped_column(String(180), unique=True)
+    category: Mapped[str] = mapped_column(String(100), default="General")
+    phone: Mapped[str] = mapped_column(String(30), default="")
+    email: Mapped[str] = mapped_column(String(160), default="")
+    address: Mapped[str] = mapped_column(String(255), default="")
+    contact_person: Mapped[str] = mapped_column(String(160), default="")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class Purchase(Base):
+    __tablename__ = "purchases"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), unique=True, default=lambda: str(uuidlib.uuid4()))
+    invoice_number: Mapped[str] = mapped_column(String(60), unique=True)
+    supplier_id: Mapped[int] = mapped_column(ForeignKey("suppliers.id"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    subtotal_cents: Mapped[int] = mapped_column(Integer)
+    discount_cents: Mapped[int] = mapped_column(Integer, default=0)
+    tax_cents: Mapped[int] = mapped_column(Integer, default=0)
+    total_cents: Mapped[int] = mapped_column(Integer)
+    paid_cents: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(20), default="due")
+    reference: Mapped[str] = mapped_column(String(100), default="")
+    purchased_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    items: Mapped[list[PurchaseItem]] = relationship(cascade="all, delete-orphan")
+
+
+class PurchaseItem(Base):
+    __tablename__ = "purchase_items"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    purchase_id: Mapped[int] = mapped_column(ForeignKey("purchases.id"))
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"))
+    product_name: Mapped[str] = mapped_column(String(180))
+    quantity: Mapped[int] = mapped_column(Integer)
+    unit_cost_cents: Mapped[int] = mapped_column(Integer)
+    line_total_cents: Mapped[int] = mapped_column(Integer)
 
 
 class Shift(Base):
@@ -168,6 +217,7 @@ class InventoryMovement(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id"))
     invoice_id: Mapped[int | None] = mapped_column(ForeignKey("invoices.id"), nullable=True)
+    purchase_id: Mapped[int | None] = mapped_column(ForeignKey("purchases.id"), nullable=True)
     quantity_delta: Mapped[int] = mapped_column(Integer)
     reason: Mapped[str] = mapped_column(String(40))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
