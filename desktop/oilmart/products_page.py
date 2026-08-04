@@ -121,9 +121,10 @@ class ProductsPage(QWidget):
         categories = QPushButton("Categories"); categories.clicked.connect(self.add_category)
         import_button = QPushButton("Import"); import_button.clicked.connect(self.import_csv)
         export_button = QPushButton("Export"); export_button.clicked.connect(self.export_csv)
+        refresh_button = QPushButton("Refresh Database"); refresh_button.clicked.connect(self.refresh_from_database)
         categories.setEnabled("product.add" in self.permissions)
         import_button.setEnabled("product.add" in self.permissions)
-        filters.addWidget(add); filters.addWidget(categories); filters.addWidget(import_button); filters.addWidget(export_button)
+        filters.addWidget(add); filters.addWidget(categories); filters.addWidget(import_button); filters.addWidget(export_button); filters.addWidget(refresh_button)
         main.addLayout(filters)
         self.table = QTableWidget(0, 10)
         self.table.setHorizontalHeaderLabels(["#", "Product", "Barcode", "Category", "Brand", "Cost Price", "Selling Price", "Stock", "Status", "Actions"])
@@ -165,6 +166,11 @@ class ProductsPage(QWidget):
         self.category.blockSignals(False); self.brand.blockSignals(True); self.brand.clear(); self.brand.addItem("All Brands", None)
         for brand in brands: self.brand.addItem(brand, brand)
         self.brand.blockSignals(False)
+
+    def refresh_from_database(self):
+        self.reload_filters()
+        self.refresh()
+        self.result_label.setText(f"{self.result_label.text()} — refreshed from database")
 
     def refresh(self):
         if not hasattr(self, "table"): return

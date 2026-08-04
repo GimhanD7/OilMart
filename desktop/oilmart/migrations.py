@@ -73,6 +73,14 @@ def _product_catalog_fields(connection: Connection) -> None:
     connection.execute(text("CREATE INDEX IF NOT EXISTS ix_products_brand ON products(brand)"))
 
 
+def _invoice_status(connection: Connection) -> None:
+    columns = {row[1] for row in connection.execute(text("PRAGMA table_info(invoices)"))}
+    if "status" not in columns:
+        connection.execute(text("ALTER TABLE invoices ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'paid'"))
+    connection.execute(text("UPDATE invoices SET status='pending' WHERE payment_method='credit' AND status='paid'"))
+    connection.execute(text("CREATE INDEX IF NOT EXISTS ix_invoices_status ON invoices(status)"))
+
+
 # Append new migrations here. Released migrations must never be edited.
 MIGRATIONS: tuple[Migration, ...] = (
     (1, "initial_schema", _initial_schema),
@@ -82,6 +90,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     (5, "login_security", _login_security),
     (6, "product_categories", _product_categories),
     (7, "product_catalog_fields", _product_catalog_fields),
+    (8, "invoice_status", _invoice_status),
 )
 
 

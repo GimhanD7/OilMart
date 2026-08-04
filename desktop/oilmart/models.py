@@ -135,6 +135,7 @@ class Invoice(Base):
     tax_cents: Mapped[int] = mapped_column(Integer, default=0)
     total_cents: Mapped[int] = mapped_column(Integer)
     payment_method: Mapped[str] = mapped_column(String(20))
+    status: Mapped[str] = mapped_column(String(20), default="paid")
     sync_status: Mapped[SyncStatus] = mapped_column(Enum(SyncStatus), default=SyncStatus.PENDING)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     items: Mapped[list[SaleItem]] = relationship(cascade="all, delete-orphan")

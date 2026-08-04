@@ -60,6 +60,7 @@ def _invoice_payload(invoice: Invoice) -> str:
         "tax_cents": invoice.tax_cents,
         "total_cents": invoice.total_cents,
         "payment_method": invoice.payment_method,
+        "status": invoice.status,
         "created_at": invoice.created_at.isoformat(),
         "items": [{"product_id": x.product_id, "name": x.product_name, "quantity": x.quantity,
                    "unit_price_cents": x.unit_price_cents, "cost_price_cents": x.cost_price_cents,
@@ -117,6 +118,7 @@ def checkout(session: Session, *, terminal_id: int, cashier_id: int, lines: list
                           shift_id=shift_id,
                           subtotal_cents=subtotal, discount_cents=discount_cents, tax_cents=tax_cents,
                           total_cents=total, payment_method=payment_method, created_at=now)
+        invoice.status = "pending" if payment_method == "credit" else "paid"
         session.add(invoice)
         session.flush()
         for product_id, quantity in merged.items():
@@ -133,6 +135,44 @@ def checkout(session: Session, *, terminal_id: int, cashier_id: int, lines: list
                                payload_json=_invoice_payload(invoice)))
         session.add(ActivityLog(user_id=cashier_id, action="created invoice", module="sales",
                                 details=local_number))
+        session.commit()
+        return invoice
+    except Exception:
+        session.rollback()
+        raise
+
+
+def reverse_invoice(session: Session, *, invoice_id: int, user_id: int,
+                    action: str, reason: str = "") -> Invoice:
+    """Atomically cancel or refund an invoice and restore inventory."""
+    if action not in {"cancelled", "refunded"}:
+        raise ValueError("Unsupported reversal action")
+    user = session.get(User, user_id)
+    if user is None:
+        raise ValueError("User does not exist")
+    require_permission(session, user, "sales.cancel" if action == "cancelled" else "sales.refund")
+    try:
+        invoice = session.get(Invoice, invoice_id)
+        if invoice is None:
+            raise CheckoutError("Invoice does not exist")
+        if invoice.status in {"cancelled", "refunded"}:
+            raise CheckoutError(f"Invoice is already {invoice.status}")
+        for item in invoice.items:
+            product = session.get(Product, item.product_id)
+            if product:
+                product.stock_quantity += item.quantity
+                session.add(InventoryMovement(product_id=product.id, invoice_id=invoice.id,
+                    quantity_delta=item.quantity, reason=action))
+        if invoice.payment_method == "credit" and invoice.customer_id:
+            customer = session.get(Customer, invoice.customer_id)
+            if customer:
+                customer.credit_balance_cents = max(0, customer.credit_balance_cents - invoice.total_cents)
+        invoice.status = action
+        payload = json.dumps({"uuid": invoice.uuid, "status": action, "reason": reason}, separators=(",", ":"))
+        session.add(SyncOutbox(aggregate_type=f"invoice_{action}", aggregate_uuid=invoice.uuid,
+                               payload_json=payload))
+        session.add(ActivityLog(user_id=user_id, action=f"{action} invoice", module="sales",
+                                details=f"{invoice.local_invoice_number}: {reason}"))
         session.commit()
         return invoice
     except Exception:
