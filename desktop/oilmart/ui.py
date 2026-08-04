@@ -39,9 +39,9 @@ QPushButton:default, QPushButton#primaryButton { background-color: #1671f8; bord
 QPushButton:default:hover, QPushButton#primaryButton:hover { background-color: #126ff5; }
 QPushButton:default:pressed, QPushButton#primaryButton:pressed { background-color: #0f58cc; }
 QPushButton:disabled { background-color: #f8fafc; border: 1px solid #e2e8f0; color: #94a3b8; }
-QTableWidget, QListWidget { background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; gridline-color: #f8fafc; selection-background-color: #eaf3ff; selection-color: #1671f8; outline: 0; font-size: 13px; }
+QTableWidget, QListWidget { background-color: #ffffff; color: #0f172a; border: 1px solid #e2e8f0; border-radius: 12px; gridline-color: #f8fafc; selection-background-color: #eaf3ff; selection-color: #1671f8; outline: 0; font-size: 13px; }
 QHeaderView::section { background-color: #ffffff; padding: 12px 10px; border: none; border-bottom: 1px solid #e2e8f0; font-weight: bold; color: #64748b; text-transform: uppercase; font-size: 12px; }
-QTableWidget::item { padding: 8px; border-bottom: 1px solid #f8fafc; }
+QTableWidget::item { padding: 8px; border-bottom: 1px solid #f8fafc; color: #0f172a; }
 QScrollBar:vertical { border: none; background: #f8fafc; width: 8px; margin: 0px; }
 QScrollBar::handle:vertical { background: #cbd5e1; min-height: 20px; border-radius: 4px; }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }
