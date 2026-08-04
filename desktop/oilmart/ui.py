@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 
 from sqlalchemy import or_, select
 
@@ -11,10 +12,10 @@ from PyQt6.QtWidgets import (
     QFormLayout, QFrame, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
     QMainWindow, QMessageBox, QPushButton, QSpinBox, QTableWidget,
     QTableWidgetItem, QVBoxLayout, QWidget, QListWidget, QInputDialog,
-    QPlainTextEdit, QCheckBox, QDoubleSpinBox
+    QPlainTextEdit, QCheckBox, QDoubleSpinBox, QGridLayout, QScrollArea
 )
 
-from .models import ActivityLog, BillSetting, Branch, Customer, Invoice, Product, Terminal, User, Role, Permission, RolePermission
+from .models import ActivityLog, BillSetting, Branch, Category, Customer, Invoice, Product, Terminal, User, Role, Permission, RolePermission
 from .receipt import PrinterError, print_receipt, receipt_data, render_receipt
 from .security import PermissionDenied, authenticate, change_password, hash_password, permission_keys
 from .services import CartLine, CheckoutError, checkout, create_customer
@@ -50,6 +51,11 @@ QMenu { background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px
 QMenu::item { padding: 6px 20px; }
 QMenu::item:selected { background-color: #f1f5f9; color: #2563eb; }
 QFrame#divider { color: #e2e8f0; }
+QFrame#posPanel, QFrame#productCard { background: white; border: 1px solid #dce5f2; border-radius: 10px; }
+QFrame#productCard:hover { border: 1px solid #8bbcff; }
+QLabel#productName { color: #17223c; font-weight: 700; }
+QLabel#productPrice { color: #111c34; font-weight: 800; }
+QLabel#stockLabel { color: #159b61; font-size: 11px; }
 """
 
 
@@ -298,7 +304,7 @@ class LoginDialog(QDialog):
 
 
 class PaymentDialog(QDialog):
-    def __init__(self, total_cents: int, parent=None):
+    def __init__(self, total_cents: int, parent=None, initial_method: str = "Cash"):
         super().__init__(parent)
         self.total_cents = total_cents
         self.setWindowTitle("Complete payment")
@@ -311,6 +317,7 @@ class PaymentDialog(QDialog):
         total.setObjectName("totalLabel")
         self.method = QComboBox()
         self.method.addItems(["Cash", "Card", "Credit"])
+        self.method.setCurrentText(initial_method)
         self.paid = QLineEdit(f"{total_cents / 100:.2f}")
         self.method.currentTextChanged.connect(self._method_changed)
         form.addRow("Total", total)
@@ -775,12 +782,51 @@ class CartEntry:
     quantity: int = 1
 
 
+class ProductCard(QFrame):
+    def __init__(self, product: Product, add_callback, parent=None):
+        super().__init__(parent)
+        self.setObjectName("productCard")
+        self.setMinimumSize(155, 190)
+        self.setMaximumHeight(215)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 12, 12, 10)
+        layout.setSpacing(5)
+        product_art = QLabel("OIL")
+        product_art.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        product_art.setFixedHeight(70)
+        product_art.setStyleSheet(
+            "font-size: 22px; font-weight: 900; color: #126ff5; "
+            "background: #eef5ff; border: 1px solid #dbeafe; border-radius: 10px;"
+        )
+        name = QLabel(product.name)
+        name.setObjectName("productName")
+        name.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        name.setWordWrap(True)
+        price = QLabel(money(product.selling_price_cents))
+        price.setObjectName("productPrice")
+        price.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        stock = QLabel(f"●  Stock: {product.stock_quantity}")
+        stock.setObjectName("stockLabel")
+        stock.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        add = QPushButton("＋ Add")
+        add.setEnabled(product.stock_quantity > 0)
+        add.clicked.connect(lambda _checked=False: add_callback(product))
+        layout.addWidget(product_art)
+        layout.addWidget(name)
+        layout.addWidget(price)
+        layout.addWidget(stock)
+        layout.addStretch()
+        layout.addWidget(add)
+
+
 class PosWidget(QWidget):
     def __init__(self, session_factory, user: User):
         super().__init__()
         self.session_factory = session_factory
         self.user = user
         self.cart: dict[int, CartEntry] = {}
+        self.held_carts: list[dict[int, CartEntry]] = []
+        self.selected_product: Product | None = None
         self.shift_id: int | None = None
         self.terminal_id: int | None = None
         with self.session_factory() as session:
@@ -792,21 +838,16 @@ class PosWidget(QWidget):
 
     def _build_ui(self):
         root = QVBoxLayout(self)
-        root.setContentsMargins(24, 24, 24, 24)
-        root.setSpacing(20)
+        root.setContentsMargins(10, 10, 10, 10)
+        root.setSpacing(10)
         header = QHBoxLayout()
-        title = QLabel("OilMart POS")
+        title = QLabel("POS - Sales")
         title.setObjectName("titleLabel")
         header.addWidget(title)
-        
-        if "user.roles" in self.permissions:
-            admin_btn = QPushButton("Administration")
-            admin_btn.clicked.connect(self._open_admin)
-            header.addWidget(admin_btn)
-        if "user.create" in self.permissions or "user.edit" in self.permissions:
-            users_btn = QPushButton("Users")
-            users_btn.clicked.connect(self._open_users)
-            header.addWidget(users_btn)
+        subtitle = QLabel("Create new invoice and process sales")
+        subtitle.setObjectName("subtitleLabel")
+        header.addWidget(subtitle)
+        header.addStretch()
         self.shift_button = QPushButton("Open shift")
         self.shift_button.clicked.connect(self.close_current_shift)
         self.shift_button.setVisible("sales.create" in self.permissions)
@@ -817,30 +858,59 @@ class PosWidget(QWidget):
         root.addLayout(header)
 
         body = QHBoxLayout()
-        left = QVBoxLayout()
+        body.setSpacing(10)
+        left_panel = QFrame()
+        left_panel.setObjectName("posPanel")
+        left = QVBoxLayout(left_panel)
+        left.setContentsMargins(10, 10, 10, 10)
+        search_row = QHBoxLayout()
         self.search = QLineEdit()
         self.search.setPlaceholderText("Scan barcode or search product name…")
         self.search.setClearButtonEnabled(True)
         self.search.textChanged.connect(self.search_products)
         self.search.returnPressed.connect(self.add_first_result)
-        left.addWidget(self.search)
-        self.products = QTableWidget(0, 4)
-        self.products.setHorizontalHeaderLabels(["Product", "Barcode", "Price", "Stock"])
-        self.products.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.products.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.products.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        self.products.doubleClicked.connect(self.add_selected_product)
-        left.addWidget(self.products)
-        add = QPushButton("Add selected product")
-        add.clicked.connect(self.add_selected_product)
-        left.addWidget(add)
+        search_row.addWidget(self.search, 1)
+        self.category = QComboBox()
+        with self.session_factory() as session:
+            self.categories = session.scalars(select(Category).where(Category.active.is_(True)).order_by(Category.name)).all()
+            for category in self.categories:
+                session.expunge(category)
+        self.category.addItem("All Categories", None)
+        for category in self.categories:
+            self.category.addItem(category.name, category.id)
+        self.category.currentTextChanged.connect(self.search_products)
+        search_row.addWidget(self.category)
+        left.addLayout(search_row)
+        category_chips = QHBoxLayout()
+        for label in ["All Items", *[category.name for category in self.categories[:6]]]:
+            chip = QPushButton(label)
+            chip.clicked.connect(lambda _checked=False, value=label: self.select_category(value))
+            category_chips.addWidget(chip)
+        category_chips.addStretch()
+        left.addLayout(category_chips)
+        self.product_scroll = QScrollArea()
+        self.product_scroll.setWidgetResizable(True)
+        self.product_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.product_host = QWidget()
+        self.product_grid = QGridLayout(self.product_host)
+        self.product_grid.setContentsMargins(0, 4, 0, 4)
+        self.product_grid.setSpacing(8)
+        self.product_grid.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self.product_scroll.setWidget(self.product_host)
+        left.addWidget(self.product_scroll, 1)
+        self.product_detail = QFrame()
+        self.product_detail.setObjectName("posPanel")
+        self.product_detail_layout = QHBoxLayout(self.product_detail)
+        self.product_detail_layout.addWidget(QLabel("Select a product to view details"))
+        left.addWidget(self.product_detail)
 
-        divider = QFrame()
-        divider.setObjectName("divider")
-        divider.setFrameShape(QFrame.Shape.VLine)
-        right = QVBoxLayout()
+        right_panel = QFrame()
+        right_panel.setObjectName("posPanel")
+        right_panel.setMinimumWidth(430)
+        right = QVBoxLayout(right_panel)
+        right.setContentsMargins(12, 12, 12, 12)
         right.setSpacing(12)
-        cart_title = QLabel("Current sale")
+        cart_title = QLabel("Current Sale")
         cart_title.setObjectName("titleLabel")
         right.addWidget(cart_title)
         customer_row = QHBoxLayout()
@@ -853,22 +923,24 @@ class PosWidget(QWidget):
         customer_row.addWidget(self.customer, 1)
         customer_row.addWidget(self.add_customer_button)
         right.addLayout(customer_row)
-        self.cart_table = QTableWidget(0, 4)
-        self.cart_table.setHorizontalHeaderLabels(["Item", "Qty", "Price", "Amount"])
+        self.cart_table = QTableWidget(0, 6)
+        self.cart_table.setHorizontalHeaderLabels(["#", "Item", "Qty", "Price", "Amount", ""])
         self.cart_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.cart_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.cart_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.cart_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         right.addWidget(self.cart_table)
         controls = QHBoxLayout()
         minus = QPushButton("− Qty")
         plus = QPushButton("+ Qty")
         remove = QPushButton("Remove")
-        clear = QPushButton("Clear sale")
+        hold = QPushButton("Hold")
+        clear = QPushButton("Clear All")
         minus.clicked.connect(lambda: self.change_quantity(-1))
         plus.clicked.connect(lambda: self.change_quantity(1))
         remove.clicked.connect(self.remove_selected)
+        hold.clicked.connect(self.hold_sale)
         clear.clicked.connect(self.clear_cart)
-        for button in (minus, plus, remove, clear):
+        for button in (minus, plus, remove, hold, clear):
             controls.addWidget(button)
         right.addLayout(controls)
         totals_form = QFormLayout()
@@ -887,20 +959,42 @@ class PosWidget(QWidget):
         totals_form.addRow("Discount", self.discount_amount)
         totals_form.addRow("Tax", self.tax_amount)
         right.addLayout(totals_form)
+        self.subtotal_summary = QLabel("Subtotal: Rs. 0.00")
+        self.discount_summary = QLabel("Discount: Rs. 0.00")
+        self.tax_summary = QLabel("Tax: Rs. 0.00")
+        for summary in (self.subtotal_summary, self.discount_summary, self.tax_summary):
+            summary.setAlignment(Qt.AlignmentFlag.AlignRight)
+            right.addWidget(summary)
         self.total = QLabel("Total: Rs. 0.00")
         self.total.setAlignment(Qt.AlignmentFlag.AlignRight)
         self.total.setObjectName("totalLabel")
         right.addWidget(self.total)
+        payment_methods = QHBoxLayout()
+        self.payment_method = "Cash"
+        for method in ("Cash", "Card", "Credit", "Other"):
+            button = QPushButton(method)
+            button.setEnabled(method != "Other")
+            button.clicked.connect(lambda _checked=False, selected=method: self.select_payment_method(selected))
+            payment_methods.addWidget(button)
+        right.addLayout(payment_methods)
         self.checkout_button = QPushButton("PAY / COMPLETE SALE")
         self.checkout_button.setObjectName("primaryButton")
         self.checkout_button.setMinimumHeight(52)
         self.checkout_button.setEnabled(False)
         self.checkout_button.clicked.connect(self.complete_sale)
         right.addWidget(self.checkout_button)
+        status_row = QHBoxLayout()
+        status_row.addWidget(QLabel("● Offline ready"))
+        with self.session_factory() as session:
+            settings = session.scalar(select(BillSetting).where(BillSetting.branch_id == self.user.branch_id))
+            printer_status = "Printer connected" if settings and settings.printer_name else "Printer not configured"
+        status_row.addWidget(QLabel(printer_status))
+        status_row.addStretch()
+        status_row.addWidget(QLabel(datetime.now().strftime("%d %b %Y | %H:%M")))
+        right.addLayout(status_row)
 
-        body.addLayout(left, 3)
-        body.addWidget(divider)
-        body.addLayout(right, 2)
+        body.addWidget(left_panel, 3)
+        body.addWidget(right_panel, 2)
         root.addLayout(body)
         self.search.setFocus()
         self.refresh_customers()
@@ -912,6 +1006,14 @@ class PosWidget(QWidget):
     def _open_users(self):
         dialog = UserManagementDialog(self.session_factory, self.user, self)
         dialog.exec()
+
+    def select_payment_method(self, method: str):
+        self.payment_method = method
+
+    def select_category(self, label: str):
+        category = "All Categories" if label == "All Items" else label
+        self.category.setCurrentText(category)
+        self.search_products()
 
     def ensure_shift(self) -> bool:
         if "sales.create" not in self.permissions:
@@ -977,16 +1079,32 @@ class PosWidget(QWidget):
             query = select(Product).where(Product.active.is_(True))
             if term:
                 query = query.where(or_(Product.name.ilike(f"%{term}%"), Product.barcode.ilike(f"%{term}%")))
+            category_id = self.category.currentData() if hasattr(self, "category") else None
+            if category_id is not None:
+                query = query.where(Product.category_id == category_id)
             rows = session.execute(query.order_by(Product.name).limit(100)).scalars().all()
             for product in rows:
                 session.expunge(product)
-        self.products.setRowCount(len(rows))
-        for row, product in enumerate(rows):
-            values = (product.name, product.barcode, money(product.selling_price_cents), str(product.stock_quantity))
-            for column, value in enumerate(values):
-                item = QTableWidgetItem(value)
-                item.setData(Qt.ItemDataRole.UserRole, product if column == 0 else None)
-                self.products.setItem(row, column, item)
+        self.product_results = rows
+        while self.product_grid.count():
+            item = self.product_grid.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        columns = 4 if self.width() >= 1050 else 3
+        for index, product in enumerate(rows):
+            self.product_grid.addWidget(ProductCard(product, self.add_product), index // columns, index % columns)
+        if "product.add" in self.permissions:
+            add_button = QPushButton("＋\nAdd New Product")
+            add_button.setMinimumSize(155, 190)
+            add_button.setStyleSheet("color: #126ff5; font-weight: 700; border: 1px dashed #8bbcff;")
+            add_button.clicked.connect(self.add_new_product)
+            index = len(rows)
+            self.product_grid.addWidget(add_button, index // columns, index % columns)
+        if not rows and "product.add" not in self.permissions:
+            empty = QLabel("No products found")
+            empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            empty.setObjectName("subtitleLabel")
+            self.product_grid.addWidget(empty, 0, 0, 1, columns)
 
     def refresh_customers(self, selected_id: int | None = None):
         self.customer.clear()
@@ -1026,15 +1144,11 @@ class PosWidget(QWidget):
         self.refresh_customers(customer.id)
 
     def add_first_result(self):
-        if self.products.rowCount():
-            self.products.selectRow(0)
-            self.add_selected_product()
+        if self.product_results:
+            self.add_product(self.product_results[0])
 
-    def add_selected_product(self):
-        row = self.products.currentRow()
-        if row < 0:
-            return
-        product = self.products.item(row, 0).data(Qt.ItemDataRole.UserRole)
+    def add_product(self, product: Product):
+        self.show_product_detail(product)
         existing = self.cart.get(product.id)
         quantity = (existing.quantity if existing else 0) + 1
         if quantity > product.stock_quantity:
@@ -1045,6 +1159,99 @@ class PosWidget(QWidget):
         self.search.clear()
         self.search.setFocus()
 
+    def show_product_detail(self, product: Product):
+        self.selected_product = product
+        while self.product_detail_layout.count():
+            item = self.product_detail_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        category_name = next((category.name for category in self.categories
+                              if category.id == product.category_id), "Uncategorized")
+        name = QLabel(f"{product.name}\nBarcode: {product.barcode}  |  Category: {category_name}")
+        name.setObjectName("productName")
+        stock = QLabel(f"In Stock\n{product.stock_quantity} available")
+        stock.setObjectName("stockLabel")
+        price = QLabel(money(product.selling_price_cents))
+        price.setObjectName("productPrice")
+        add = QPushButton("Add to Cart")
+        add.setObjectName("primaryButton")
+        add.clicked.connect(lambda _checked=False: self.add_product(product))
+        self.product_detail_layout.addWidget(name, 1)
+        self.product_detail_layout.addWidget(stock)
+        self.product_detail_layout.addWidget(price)
+        self.product_detail_layout.addWidget(add)
+
+    def add_new_product(self):
+        barcode, ok = QInputDialog.getText(self, "Add product", "Barcode:")
+        if not ok or not barcode.strip(): return
+        name, ok = QInputDialog.getText(self, "Add product", "Product name:")
+        if not ok or not name.strip(): return
+        with self.session_factory() as session:
+            category_rows = session.execute(select(Category.id, Category.name).where(
+                Category.active.is_(True)).order_by(Category.name)).all()
+        category_name, ok = QInputDialog.getItem(
+            self, "Add product", "Category:",
+            [name for _, name in category_rows] + ["+ Create New Category"], 0, False
+        )
+        if not ok: return
+        if category_name == "+ Create New Category":
+            category_name, ok = QInputDialog.getText(self, "New category", "Category name:")
+            if not ok or not category_name.strip(): return
+            with self.session_factory() as session:
+                category = Category(name=category_name.strip())
+                session.add(category)
+                try:
+                    session.flush()
+                    category_id = category.id
+                    session.add(ActivityLog(user_id=self.user.id, action="created category",
+                                            module="products", details=category.name))
+                    session.commit()
+                except Exception:
+                    session.rollback()
+                    QMessageBox.warning(self, "Cannot add category", "Category name must be unique.")
+                    return
+            self.reload_categories(category_id)
+        else:
+            category_id = next(category_id for category_id, existing_name in category_rows
+                               if existing_name == category_name)
+        purchase, ok = QInputDialog.getDouble(self, "Add product", "Purchase price (Rs.):", 0, 0, 100000000, 2)
+        if not ok: return
+        selling, ok = QInputDialog.getDouble(self, "Add product", "Selling price (Rs.):", 0, 0, 100000000, 2)
+        if not ok: return
+        stock, ok = QInputDialog.getInt(self, "Add product", "Opening stock:", 0, 0, 100000000)
+        if not ok: return
+        with self.session_factory() as session:
+            product = Product(barcode=barcode.strip(), name=name.strip(), category_id=category_id,
+                purchase_price_cents=int(round(purchase * 100)),
+                selling_price_cents=int(round(selling * 100)), stock_quantity=stock)
+            session.add(product)
+            try:
+                session.flush()
+                session.add(ActivityLog(user_id=self.user.id, action="created product",
+                                        module="products", details=product.name))
+                session.commit()
+            except Exception:
+                session.rollback()
+                QMessageBox.warning(self, "Cannot add product", "Barcode must be unique.")
+                return
+        self.search_products()
+
+    def reload_categories(self, selected_id: int | None = None):
+        with self.session_factory() as session:
+            categories = session.scalars(select(Category).where(Category.active.is_(True)).order_by(Category.name)).all()
+            for category in categories:
+                session.expunge(category)
+        self.categories = categories
+        self.category.blockSignals(True)
+        self.category.clear()
+        self.category.addItem("All Categories", None)
+        for category in categories:
+            self.category.addItem(category.name, category.id)
+        if selected_id is not None:
+            index = self.category.findData(selected_id)
+            if index >= 0: self.category.setCurrentIndex(index)
+        self.category.blockSignals(False)
+
     def refresh_cart(self):
         entries = list(self.cart.values())
         self.cart_table.setRowCount(len(entries))
@@ -1052,20 +1259,58 @@ class PosWidget(QWidget):
         for row, entry in enumerate(entries):
             amount = entry.product.selling_price_cents * entry.quantity
             total += amount
-            values = (entry.product.name, str(entry.quantity), money(entry.product.selling_price_cents), money(amount))
+            values = (str(row + 1), entry.product.name)
             for column, value in enumerate(values):
                 item = QTableWidgetItem(value)
-                item.setData(Qt.ItemDataRole.UserRole, entry.product.id if column == 0 else None)
+                item.setData(Qt.ItemDataRole.UserRole, entry.product.id if column == 1 else None)
                 self.cart_table.setItem(row, column, item)
+            quantity = QWidget()
+            quantity_layout = QHBoxLayout(quantity)
+            quantity_layout.setContentsMargins(0, 0, 0, 0)
+            minus = QPushButton("−"); minus.setFixedWidth(28)
+            count = QLabel(str(entry.quantity)); count.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            plus = QPushButton("+"); plus.setFixedWidth(28)
+            minus.clicked.connect(lambda _checked=False, pid=entry.product.id: self.change_product_quantity(pid, -1))
+            plus.clicked.connect(lambda _checked=False, pid=entry.product.id: self.change_product_quantity(pid, 1))
+            quantity_layout.addWidget(minus); quantity_layout.addWidget(count); quantity_layout.addWidget(plus)
+            self.cart_table.setCellWidget(row, 2, quantity)
+            self.cart_table.setItem(row, 3, QTableWidgetItem(money(entry.product.selling_price_cents)))
+            self.cart_table.setItem(row, 4, QTableWidgetItem(money(amount)))
+            delete = QPushButton("×")
+            delete.setStyleSheet("color: #ef4444; font-weight: 900;")
+            delete.clicked.connect(lambda _checked=False, pid=entry.product.id: self.remove_product(pid))
+            self.cart_table.setCellWidget(row, 5, delete)
         discount = int(round(self.discount_amount.value() * 100)) if hasattr(self, "discount_amount") else 0
         tax = int(round(self.tax_amount.value() * 100)) if hasattr(self, "tax_amount") else 0
         grand_total = max(0, total - discount + tax)
+        self.subtotal_summary.setText(f"Subtotal: {money(total)}")
+        self.discount_summary.setText(f"Discount: {money(discount)}")
+        self.tax_summary.setText(f"Tax: {money(tax)}")
         self.total.setText(f"Total: {money(grand_total)}")
+        self.checkout_button.setText(f"Pay {money(grand_total)}  →")
         self.checkout_button.setEnabled(bool(entries) and "sales.create" in self.permissions)
 
     def _selected_cart_id(self) -> int | None:
         row = self.cart_table.currentRow()
-        return None if row < 0 else self.cart_table.item(row, 0).data(Qt.ItemDataRole.UserRole)
+        return None if row < 0 else self.cart_table.item(row, 1).data(Qt.ItemDataRole.UserRole)
+
+    def change_product_quantity(self, product_id: int, delta: int):
+        self.cart_table.selectRow(next((row for row in range(self.cart_table.rowCount())
+            if self.cart_table.item(row, 1).data(Qt.ItemDataRole.UserRole) == product_id), -1))
+        self.change_quantity(delta)
+
+    def remove_product(self, product_id: int):
+        self.cart.pop(product_id, None)
+        self.refresh_cart()
+
+    def hold_sale(self):
+        if not self.cart:
+            QMessageBox.information(self, "Hold sale", "The current sale is empty.")
+            return
+        self.held_carts.append(dict(self.cart))
+        self.cart.clear()
+        self.refresh_cart()
+        QMessageBox.information(self, "Sale held", f"Sale held in memory ({len(self.held_carts)} held).")
 
     def change_quantity(self, delta: int):
         product_id = self._selected_cart_id()
@@ -1103,7 +1348,7 @@ class PosWidget(QWidget):
             QMessageBox.warning(self, "Invalid discount", "Discount cannot exceed the subtotal.")
             return
         total = subtotal - discount + tax
-        dialog = PaymentDialog(total, self)
+        dialog = PaymentDialog(total, self, self.payment_method)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         method, paid = dialog.result_data
@@ -1132,7 +1377,11 @@ class PosWidget(QWidget):
         self.customer.setCurrentIndex(0)
         self.refresh_cart()
         self.search_products()
-        self.statusBar().showMessage(f"Completed {invoice.local_invoice_number}", 8000)
+        main_window = self.window()
+        if isinstance(main_window, QMainWindow):
+            main_window.statusBar().showMessage(
+                f"Completed {invoice.local_invoice_number}", 8000
+            )
         receipt_dialog = ReceiptDialog(self.session_factory, invoice.id, self)
         with self.session_factory() as session:
             settings = session.scalar(select(BillSetting).where(BillSetting.branch_id == invoice.branch_id))

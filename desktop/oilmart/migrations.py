@@ -53,6 +53,17 @@ def _login_security(connection: Connection) -> None:
         connection.execute(text("ALTER TABLE users ADD COLUMN must_change_password BOOLEAN NOT NULL DEFAULT 0"))
 
 
+def _product_categories(connection: Connection) -> None:
+    connection.execute(text(
+        "CREATE TABLE IF NOT EXISTS categories ("
+        "id INTEGER PRIMARY KEY, name VARCHAR(100) NOT NULL UNIQUE, active BOOLEAN NOT NULL DEFAULT 1)"
+    ))
+    columns = {row[1] for row in connection.execute(text("PRAGMA table_info(products)"))}
+    if "category_id" not in columns:
+        connection.execute(text("ALTER TABLE products ADD COLUMN category_id INTEGER REFERENCES categories(id)"))
+    connection.execute(text("CREATE INDEX IF NOT EXISTS ix_products_category_id ON products(category_id)"))
+
+
 # Append new migrations here. Released migrations must never be edited.
 MIGRATIONS: tuple[Migration, ...] = (
     (1, "initial_schema", _initial_schema),
@@ -60,6 +71,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     (3, "receipt_printer_settings", _receipt_printer_settings),
     (4, "invoice_shift_link", _invoice_shift_link),
     (5, "login_security", _login_security),
+    (6, "product_categories", _product_categories),
 )
 
 

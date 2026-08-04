@@ -74,10 +74,18 @@ class User(Base):
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
+class Category(Base):
+    __tablename__ = "categories"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), unique=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
 class Product(Base):
     __tablename__ = "products"
     id: Mapped[int] = mapped_column(primary_key=True)
     uuid: Mapped[str] = mapped_column(String(36), unique=True, default=lambda: str(uuidlib.uuid4()))
+    category_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"), nullable=True)
     barcode: Mapped[str] = mapped_column(String(80), unique=True)
     name: Mapped[str] = mapped_column(String(180), index=True)
     purchase_price_cents: Mapped[int] = mapped_column(Integer)

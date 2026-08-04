@@ -27,6 +27,7 @@ QLabel#title { font-size: 23px; font-weight: 800; color: #111c34; }
 QLabel#muted { color: #74819a; }
 QLabel#metricTitle { color: #64718a; font-weight: 600; }
 QLabel#metricValue { font-size: 21px; font-weight: 800; color: #14213b; }
+QLabel#metricTrend { color: #12a96b; font-size: 11px; font-weight: 700; }
 QListWidget { border: 0; outline: 0; background: white; padding: 6px; }
 QListWidget::item { padding: 13px 12px; margin: 3px 0; border-radius: 9px; color: #26334f; font-size: 14px; font-weight: 600; }
 QListWidget::item:selected { color: #1269e8; background: #eaf3ff; font-weight: 700; }
@@ -104,14 +105,32 @@ class DashboardWidget(QWidget):
             elif item.layout():
                 self.clear_layout(item.layout())
 
-    def card(self, title, value, color):
+    def card(self, title, value, color, pale_color, icon_name, trend, trend_color="#12a96b"):
         frame = QFrame(objectName="card")
-        box = QVBoxLayout(frame)
-        icon = QLabel("●")
-        icon.setStyleSheet(f"font-size: 20px; color: {color};")
+        frame.setMinimumHeight(112)
+        box = QHBoxLayout(frame)
+        box.setContentsMargins(14, 14, 14, 14)
+        box.setSpacing(12)
+        icon_box = QFrame()
+        icon_box.setFixedSize(48, 48)
+        icon_box.setStyleSheet(f"background: {pale_color}; border: 0; border-radius: 10px;")
+        icon_layout = QVBoxLayout(icon_box)
+        icon_layout.setContentsMargins(0, 0, 0, 0)
+        icon = QLabel()
+        icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        icon.setPixmap(line_icon(icon_name, color, 25).pixmap(25, 25))
+        icon_layout.addWidget(icon)
+        box.addWidget(icon_box)
+        text = QVBoxLayout()
+        text.setSpacing(3)
         label = QLabel(title, objectName="metricTitle")
         number = QLabel(value, objectName="metricValue")
-        box.addWidget(icon); box.addWidget(label); box.addWidget(number)
+        trend_label = QLabel(trend, objectName="metricTrend")
+        trend_label.setStyleSheet(f"color: {trend_color}; font-size: 11px; font-weight: 700;")
+        text.addWidget(label)
+        text.addWidget(number)
+        text.addWidget(trend_label)
+        box.addLayout(text, 1)
         return frame
 
     def panel(self, title, content):
@@ -156,11 +175,11 @@ class DashboardWidget(QWidget):
         self.layout.addLayout(heading)
         cards = QGridLayout()
         metrics = [
-            ("Today's Sales", money(today_sales), "#1872f7"),
-            ("Total Invoices", str(invoice_count), "#16b978"),
-            ("Total Customers", str(customer_count), "#7157ed"),
-            ("Low Stock Items", str(low_count), "#f39a22"),
-            ("Gross Profit", money(profit), "#ef5260"),
+            ("Today's Sales", money(today_sales), "#1671f8", "#eaf3ff", "purchases", "▲ Live today"),
+            ("Total Invoices", str(invoice_count), "#10ad68", "#e9f8f0", "reports", "▲ Completed sales"),
+            ("Total Customers", str(customer_count), "#6847f5", "#f0edff", "customers", "▲ Registered"),
+            ("Low Stock Items", str(low_count), "#f28a16", "#fff3e2", "inventory", "View items", "#126ff5"),
+            ("Gross Profit", money(profit), "#ef4c5d", "#ffedf0", "reports", "▲ Sales margin"),
         ]
         for column, values in enumerate(metrics):
             cards.addWidget(self.card(*values), 0, column)
