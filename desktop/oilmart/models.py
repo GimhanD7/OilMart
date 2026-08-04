@@ -86,6 +86,8 @@ class Product(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     uuid: Mapped[str] = mapped_column(String(36), unique=True, default=lambda: str(uuidlib.uuid4()))
     category_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"), nullable=True)
+    brand: Mapped[str] = mapped_column(String(100), default="")
+    image_path: Mapped[str] = mapped_column(String(500), default="")
     barcode: Mapped[str] = mapped_column(String(80), unique=True)
     name: Mapped[str] = mapped_column(String(180), index=True)
     purchase_price_cents: Mapped[int] = mapped_column(Integer)

@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import (
 from .models import Customer, Invoice, Payment, Product, Role, SaleItem, Terminal, User
 from .security import permission_keys
 from .ui import AdminDialog, PosWidget, UserManagementDialog, money
+from .products_page import ProductsPage
 
 
 STYLE = """
@@ -265,7 +266,8 @@ class MainWindow(QMainWindow):
         top.addWidget(QLabel(f"👤  {user.display_name}\n     {self.role_name}")); content.addWidget(topbar)
         self.stack = QStackedWidget(); self.dashboard_view = DashboardWidget(session_factory)
         self.pos_view = PosWidget(session_factory, user)
-        self.stack.addWidget(self.dashboard_view); self.stack.addWidget(self.pos_view)
+        self.products_view = ProductsPage(session_factory, user)
+        self.stack.addWidget(self.dashboard_view); self.stack.addWidget(self.pos_view); self.stack.addWidget(self.products_view)
         content.addWidget(self.stack); root.addLayout(content, 1); self.setCentralWidget(root_widget)
         self.nav.setCurrentRow(0)
 
@@ -281,6 +283,9 @@ class MainWindow(QMainWindow):
             if self.pos_view.shift_id is None and not self.pos_view.ensure_shift():
                 self.nav.setCurrentRow(self.pages.index("Dashboard")); return
             self.stack.setCurrentWidget(self.pos_view); self.pos_view.search.setFocus()
+        elif page == "Products":
+            self.products_view.reload_filters(); self.products_view.refresh()
+            self.stack.setCurrentWidget(self.products_view)
         elif page == "Users":
             UserManagementDialog(self.session_factory, self.user, self).exec()
             self.nav.setCurrentRow(self.pages.index("Dashboard"))

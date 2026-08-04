@@ -64,6 +64,15 @@ def _product_categories(connection: Connection) -> None:
     connection.execute(text("CREATE INDEX IF NOT EXISTS ix_products_category_id ON products(category_id)"))
 
 
+def _product_catalog_fields(connection: Connection) -> None:
+    columns = {row[1] for row in connection.execute(text("PRAGMA table_info(products)"))}
+    if "brand" not in columns:
+        connection.execute(text("ALTER TABLE products ADD COLUMN brand VARCHAR(100) NOT NULL DEFAULT ''"))
+    if "image_path" not in columns:
+        connection.execute(text("ALTER TABLE products ADD COLUMN image_path VARCHAR(500) NOT NULL DEFAULT ''"))
+    connection.execute(text("CREATE INDEX IF NOT EXISTS ix_products_brand ON products(brand)"))
+
+
 # Append new migrations here. Released migrations must never be edited.
 MIGRATIONS: tuple[Migration, ...] = (
     (1, "initial_schema", _initial_schema),
@@ -72,6 +81,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     (4, "invoice_shift_link", _invoice_shift_link),
     (5, "login_security", _login_security),
     (6, "product_categories", _product_categories),
+    (7, "product_catalog_fields", _product_catalog_fields),
 )
 
 

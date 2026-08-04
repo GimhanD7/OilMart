@@ -59,7 +59,7 @@ def seed(session):
     session.add_all(categories); session.flush()
     engine_oils = categories[0]
     session.add_all([
-        Product(barcode="100001", name="Engine Oil 1L", category_id=engine_oils.id, purchase_price_cents=180000, selling_price_cents=220000, stock_quantity=40),
-        Product(barcode="100002", name="Engine Oil 4L", category_id=engine_oils.id, purchase_price_cents=620000, selling_price_cents=750000, stock_quantity=20),
+        Product(barcode="100001", name="Engine Oil 1L", category_id=engine_oils.id, brand="OilMart", purchase_price_cents=180000, selling_price_cents=220000, stock_quantity=40),
+        Product(barcode="100002", name="Engine Oil 4L", category_id=engine_oils.id, brand="OilMart", purchase_price_cents=620000, selling_price_cents=750000, stock_quantity=20),
     ])
     session.commit()
