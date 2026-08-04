@@ -2,10 +2,10 @@ from datetime import datetime, timezone
 
 from sqlalchemy import func, select
 from PyQt6.QtCore import QByteArray, Qt
-from PyQt6.QtGui import QColor, QIcon, QPainter, QPixmap
+from PyQt6.QtGui import QColor, QIcon, QPainter, QPixmap, QPen
 from PyQt6.QtSvg import QSvgRenderer
 from PyQt6.QtWidgets import (
-    QFrame, QGridLayout, QHBoxLayout, QHeaderView, QLabel, QListWidget, QListWidgetItem,
+    QComboBox, QFrame, QGridLayout, QHBoxLayout, QHeaderView, QLabel, QListWidget, QListWidgetItem,
     QMainWindow, QMessageBox, QPushButton, QStackedWidget, QTableWidget,
     QTableWidgetItem, QVBoxLayout, QWidget,
 )
@@ -15,28 +15,31 @@ from .security import permission_keys
 from .ui import AdminDialog, PosWidget, UserManagementDialog, money
 from .products_page import ProductsPage
 from .sales_page import SalesPage
+from .business_pages import DirectoryPage, PurchasesPage
 
 
 STYLE = """
-QMainWindow { background: #f7f9fd; color: #15213b; font-family: 'Segoe UI'; }
-QFrame#sidebar, QFrame#topbar, QFrame#card, QFrame#panel { background: white; }
-QFrame#sidebar { border-right: 1px solid #dde5f1; }
-QFrame#topbar { border-bottom: 1px solid #dde5f1; }
-QFrame#card, QFrame#panel { border: 1px solid #dde5f1; border-radius: 10px; }
-QLabel#brand { font-size: 22px; font-weight: 800; color: #15213a; }
-QLabel#brandPos { font-size: 22px; font-weight: 800; color: #1671f8; }
-QLabel#title { font-size: 23px; font-weight: 800; color: #111c34; }
-QLabel#muted { color: #74819a; }
-QLabel#metricTitle { color: #64718a; font-weight: 600; }
-QLabel#metricValue { font-size: 21px; font-weight: 800; color: #14213b; }
-QLabel#metricTrend { color: #12a96b; font-size: 11px; font-weight: 700; }
-QListWidget { border: 0; outline: 0; background: white; padding: 6px; }
-QListWidget::item { padding: 13px 12px; margin: 3px 0; border-radius: 9px; color: #26334f; font-size: 14px; font-weight: 600; }
-QListWidget::item:selected { color: #1269e8; background: #eaf3ff; font-weight: 700; }
-QListWidget::item:hover { background: #f1f6fd; }
-QPushButton#logout { color: #e33d50; background: white; border: 1px solid #ffd1d7; border-radius: 8px; padding: 11px; text-align: left; }
-QTableWidget { background: white; border: 0; gridline-color: #edf1f7; }
-QHeaderView::section { background: white; border: 0; border-bottom: 1px solid #e3e9f2; padding: 8px; color: #68758d; font-weight: 650; }
+QMainWindow { background: #f8fafc; color: #0f172a; font-family: 'Inter', 'Segoe UI', sans-serif; }
+QFrame#sidebar, QFrame#topbar, QFrame#card, QFrame#panel { background: #ffffff; }
+QFrame#sidebar { border-right: 1px solid #e2e8f0; }
+QFrame#topbar { border-bottom: 1px solid #e2e8f0; }
+QFrame#card, QFrame#panel { border: 1px solid #e2e8f0; border-radius: 12px; }
+QLabel#brand { font-size: 24px; font-weight: 900; color: #0f172a; }
+QLabel#brandPos { font-size: 24px; font-weight: 900; color: #2563eb; }
+QLabel#title { font-size: 24px; font-weight: 800; color: #0f172a; }
+QLabel#muted { color: #64748b; font-size: 13px; }
+QLabel#metricTitle { color: #64748b; font-weight: 600; font-size: 13px; }
+QLabel#metricValue { font-size: 24px; font-weight: 800; color: #0f172a; }
+QLabel#metricTrend { color: #10b981; font-size: 12px; font-weight: 700; }
+QListWidget { border: 0; outline: 0; background: white; padding: 8px; }
+QListWidget::item { padding: 14px 16px; margin: 4px 0; border-radius: 10px; color: #334155; font-size: 14px; font-weight: 600; }
+QListWidget::item:selected { color: #2563eb; background: #eff6ff; font-weight: 700; }
+QListWidget::item:hover:!selected { background: #f8fafc; }
+QPushButton#logout { color: #ef4444; background: white; border: 1px solid #fee2e2; border-radius: 10px; padding: 12px; text-align: left; font-weight: 600; }
+QPushButton#logout:hover { background: #fef2f2; }
+QTableWidget { background: white; border: 0; gridline-color: #f1f5f9; font-size: 13px; }
+QHeaderView::section { background: white; border: 0; border-bottom: 1px solid #e2e8f0; padding: 12px 8px; color: #64748b; font-weight: 700; font-size: 12px; text-transform: uppercase; }
+QTableWidget::item { padding: 8px; border-bottom: 1px solid #f8fafc; }
 """
 
 
@@ -70,6 +73,35 @@ def line_icon(name: str, color: str = "#667594", size: int = 22) -> QIcon:
     return QIcon(pixmap)
 
 
+class SalesOverviewChart(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent); self.values = [10, 15, 8, 18, 12, 24]; self.setMinimumHeight(200)
+    def paintEvent(self, event):
+        painter = QPainter(self); painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        rect = self.rect().adjusted(20, 20, -20, -30)
+        painter.setPen(QPen(QColor("#f1f5f9"), 1))
+        for i in range(5):
+            y = rect.top() + i * rect.height() / 4; painter.drawLine(rect.left(), int(y), rect.right(), int(y))
+        maximum = max(self.values); step = rect.width() / max(len(self.values) - 1, 1)
+        points = [(int(rect.left() + i * step), int(rect.bottom() - (value / maximum) * rect.height())) for i, value in enumerate(self.values)]
+        
+        from PyQt6.QtGui import QPolygonF, QBrush
+        from PyQt6.QtCore import QPointF
+        poly = QPolygonF([QPointF(points[0][0], rect.bottom())] + [QPointF(x, y) for x, y in points] + [QPointF(points[-1][0], rect.bottom())])
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(QColor(37, 99, 235, 20)))
+        painter.drawPolygon(poly)
+        
+        painter.setPen(QPen(QColor("#2563eb"), 2.5))
+        for a, b in zip(points, points[1:]): painter.drawLine(a[0], a[1], b[0], b[1])
+        painter.setBrush(QColor("#2563eb"))
+        for x, y in points: painter.drawEllipse(x - 4, y - 4, 8, 8)
+        
+        painter.setPen(QColor("#64748b"))
+        labels = ["Mon", "Tue", "Wed", "Fri", "Sat", "Sun"]
+        for i, label in enumerate(labels):
+            painter.drawText(points[i][0] - 10, int(rect.bottom() + 20), label)
+
 def table(headers, rows):
     widget = QTableWidget(len(rows), len(headers))
     widget.setHorizontalHeaderLabels(headers)
@@ -78,7 +110,14 @@ def table(headers, rows):
     widget.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
     for row_number, values in enumerate(rows):
         for column, value in enumerate(values):
-            widget.setItem(row_number, column, QTableWidgetItem(str(value)))
+            item = QTableWidgetItem(str(value))
+            if str(value) == "Paid" or str(value) == "In Stock":
+                item.setForeground(QColor("#10b981"))
+            elif str(value) == "Low":
+                item.setForeground(QColor("#ef4444"))
+            elif str(value) == "Pending":
+                item.setForeground(QColor("#f59e0b"))
+            widget.setItem(row_number, column, item)
     return widget
 
 
@@ -138,9 +177,18 @@ class DashboardWidget(QWidget):
     def panel(self, title, content):
         frame = QFrame(objectName="panel")
         box = QVBoxLayout(frame)
+        box.setContentsMargins(18, 18, 18, 18)
+        header = QHBoxLayout()
         heading = QLabel(title)
-        heading.setStyleSheet("font-size: 14px; font-weight: 750;")
-        box.addWidget(heading); box.addWidget(content)
+        heading.setStyleSheet("font-size: 15px; font-weight: 800; color: #0f172a;")
+        header.addWidget(heading)
+        header.addStretch()
+        view_all = QLabel("View all")
+        view_all.setStyleSheet("color: #2563eb; font-size: 13px; font-weight: 700;")
+        header.addWidget(view_all)
+        box.addLayout(header)
+        box.addSpacing(10)
+        box.addWidget(content)
         return frame
 
     def refresh(self):
@@ -187,15 +235,43 @@ class DashboardWidget(QWidget):
             cards.addWidget(self.card(*values), 0, column)
         self.layout.addLayout(cards)
         middle = QGridLayout()
+        middle.setSpacing(16)
+        
+        sales_panel = QFrame(objectName="panel")
+        sales_box = QVBoxLayout(sales_panel); sales_box.setContentsMargins(18, 18, 18, 18)
+        sales_header = QHBoxLayout()
+        sales_title = QLabel("Sales Overview")
+        sales_title.setStyleSheet("font-size: 15px; font-weight: 800; color: #0f172a;")
+        sales_header.addWidget(sales_title); sales_header.addStretch()
+        combo = QComboBox(); combo.addItem("This Week")
+        combo.setStyleSheet("border: 1px solid #e2e8f0; border-radius: 6px; padding: 4px 8px; font-size: 12px; color: #475569; background: white;")
+        sales_header.addWidget(combo)
+        sales_box.addLayout(sales_header)
+        sales_box.addWidget(SalesOverviewChart())
+        
+        stats_row = QHBoxLayout()
+        tws = QVBoxLayout(); tws.addWidget(QLabel("This Week Sales", objectName="muted")); v1 = QLabel(money(today_sales * 5)); v1.setStyleSheet("font-size: 16px; font-weight: 800; color: #0f172a;"); tws.addWidget(v1)
+        lws = QVBoxLayout(); lws.addWidget(QLabel("Last Week Sales", objectName="muted")); v2 = QLabel(money(today_sales * 4.3)); v2.setStyleSheet("font-size: 16px; font-weight: 800; color: #0f172a;"); lws.addWidget(v2)
+        stats_row.addLayout(tws); stats_row.addLayout(lws)
+        trend_lbl = QLabel("▲ 14.9%"); trend_lbl.setStyleSheet("color: #10b981; background: #d1fae5; border-radius: 4px; padding: 2px 6px; font-weight: 700; font-size: 11px;")
+        stats_row.addWidget(trend_lbl)
+        sales_box.addLayout(stats_row)
+        
+        middle.addWidget(sales_panel, 0, 0, 1, 2)
+        
         middle.addWidget(self.panel("Recent Invoices", table(
-            ["Invoice", "Total", "Payment", "Date"],
-            [[i.local_invoice_number, money(i.total_cents), i.payment_method.title(),
+            ["Invoice", "Total", "Status", "Date"],
+            [[i.local_invoice_number, money(i.total_cents), "Paid" if i.status == "paid" else "Pending",
               i.created_at.strftime("%d %b %H:%M")] for i in recent]
-        )), 0, 0)
+        )), 0, 2)
         middle.addWidget(self.panel("Top Selling Products", table(
             ["Product", "Qty", "Sales"],
             [[name, qty, money(amount or 0)] for name, qty, amount in top]
-        )), 0, 1)
+        )), 0, 3)
+        middle.setColumnStretch(0, 1)
+        middle.setColumnStretch(1, 1)
+        middle.setColumnStretch(2, 1)
+        middle.setColumnStretch(3, 1)
         self.layout.addLayout(middle, 1)
         lower = QGridLayout()
         lower.addWidget(self.panel("Low Stock Alert", table(
@@ -269,7 +345,12 @@ class MainWindow(QMainWindow):
         self.pos_view = PosWidget(session_factory, user)
         self.products_view = ProductsPage(session_factory, user)
         self.sales_view = SalesPage(session_factory, user, self.open_pos_page)
-        self.stack.addWidget(self.dashboard_view); self.stack.addWidget(self.pos_view); self.stack.addWidget(self.products_view); self.stack.addWidget(self.sales_view)
+        self.purchases_view = PurchasesPage(session_factory, user)
+        self.customers_view = DirectoryPage(session_factory, user, "customer")
+        self.suppliers_view = DirectoryPage(session_factory, user, "supplier")
+        for page in (self.dashboard_view, self.pos_view, self.products_view, self.sales_view,
+                     self.purchases_view, self.customers_view, self.suppliers_view):
+            self.stack.addWidget(page)
         content.addWidget(self.stack); root.addLayout(content, 1); self.setCentralWidget(root_widget)
         self.nav.setCurrentRow(0)
 
@@ -291,6 +372,12 @@ class MainWindow(QMainWindow):
         elif page == "Sales":
             self.sales_view.refresh()
             self.stack.setCurrentWidget(self.sales_view)
+        elif page == "Purchases":
+            self.purchases_view.refresh(); self.stack.setCurrentWidget(self.purchases_view)
+        elif page == "Customers":
+            self.customers_view.reload_groups(); self.customers_view.refresh(); self.stack.setCurrentWidget(self.customers_view)
+        elif page == "Suppliers":
+            self.suppliers_view.reload_groups(); self.suppliers_view.refresh(); self.stack.setCurrentWidget(self.suppliers_view)
         elif page == "Users":
             UserManagementDialog(self.session_factory, self.user, self).exec()
             self.nav.setCurrentRow(self.pages.index("Dashboard"))

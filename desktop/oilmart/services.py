@@ -4,10 +4,10 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from .models import ActivityLog, Customer, InventoryMovement, Invoice, Payment, Product, SaleItem, SyncOutbox, Terminal
+from .models import ActivityLog, Customer, InventoryMovement, Invoice, Payment, Product, Purchase, PurchaseItem, SaleItem, Supplier, SyncOutbox, Terminal
 from .models import User
 from .security import require_permission
 
@@ -20,6 +20,13 @@ class CheckoutError(ValueError):
 class CartLine:
     product_id: int
     quantity: int
+
+
+@dataclass(frozen=True)
+class PurchaseLine:
+    product_id: int
+    quantity: int
+    unit_cost_cents: int
 
 
 def create_customer(session: Session, *, user_id: int, name: str, phone: str = "",
@@ -178,3 +185,48 @@ def reverse_invoice(session: Session, *, invoice_id: int, user_id: int,
     except Exception:
         session.rollback()
         raise
+
+
+def create_purchase(session: Session, *, supplier_id: int, user_id: int,
+                    lines: list[PurchaseLine], paid_cents: int = 0,
+                    discount_cents: int = 0, tax_cents: int = 0,
+                    reference: str = "", now: datetime | None = None) -> Purchase:
+    user = session.get(User, user_id)
+    if user is None: raise ValueError("User does not exist")
+    require_permission(session, user, "purchase.add")
+    if session.get(Supplier, supplier_id) is None: raise ValueError("Supplier does not exist")
+    if not lines or any(line.quantity <= 0 or line.unit_cost_cents < 0 for line in lines):
+        raise ValueError("Purchase requires valid items")
+    now = now or datetime.now(timezone.utc)
+    try:
+        products = {product.id: product for product in session.scalars(select(Product).where(
+            Product.id.in_([line.product_id for line in lines]))).all()}
+        if len(products) != len({line.product_id for line in lines}): raise ValueError("One or more products do not exist")
+        subtotal = sum(line.quantity * line.unit_cost_cents for line in lines)
+        total = subtotal - discount_cents + tax_cents
+        if total < 0 or paid_cents < 0 or paid_cents > total: raise ValueError("Invalid purchase totals")
+        sequence = (session.scalar(select(func.count(Purchase.id))) or 0) + 1
+        purchase = Purchase(invoice_number=f"PUR-{now:%Y%m%d}-{sequence:06d}", supplier_id=supplier_id,
+            user_id=user_id, subtotal_cents=subtotal, discount_cents=discount_cents,
+            tax_cents=tax_cents, total_cents=total, paid_cents=paid_cents,
+            status="paid" if paid_cents >= total else ("partial" if paid_cents else "due"),
+            reference=reference, purchased_at=now)
+        session.add(purchase); session.flush()
+        for line in lines:
+            product = products[line.product_id]; product.stock_quantity += line.quantity
+            product.purchase_price_cents = line.unit_cost_cents
+            purchase.items.append(PurchaseItem(product_id=product.id, product_name=product.name,
+                quantity=line.quantity, unit_cost_cents=line.unit_cost_cents,
+                line_total_cents=line.quantity * line.unit_cost_cents))
+            session.add(InventoryMovement(product_id=product.id, purchase_id=purchase.id,
+                quantity_delta=line.quantity, reason="purchase"))
+        session.flush()
+        session.add(SyncOutbox(aggregate_type="purchase", aggregate_uuid=purchase.uuid,
+            payload_json=json.dumps({"uuid": purchase.uuid, "invoice_number": purchase.invoice_number,
+                "supplier_id": supplier_id, "total_cents": total, "paid_cents": paid_cents,
+                "status": purchase.status}, separators=(",", ":"))))
+        session.add(ActivityLog(user_id=user_id, action="created purchase", module="purchases",
+                                details=purchase.invoice_number))
+        session.commit(); return purchase
+    except Exception:
+        session.rollback(); raise

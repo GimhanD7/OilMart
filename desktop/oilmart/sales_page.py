@@ -88,8 +88,20 @@ class SalesPage(QWidget):
         best_panel = QFrame(objectName="panel"); self.best_label = QLabel(); best_box = QVBoxLayout(best_panel); best_box.addWidget(QLabel("Best Sales Day")); best_box.addWidget(self.best_label); right.addWidget(best_panel); right.addStretch(); body.addLayout(right, 1)
         root.addLayout(body, 1); self.reload_cashiers(); self.refresh()
 
-    def card(self, title, value, color, note=""):
-        frame = QFrame(objectName="card"); box = QVBoxLayout(frame); icon = QLabel("●"); icon.setStyleSheet(f"color:{color};font-size:20px"); box.addWidget(icon); box.addWidget(QLabel(title, objectName="metricTitle")); box.addWidget(QLabel(value, objectName="metricValue")); box.addWidget(QLabel(note, objectName="muted")); return frame
+    def card(self, title, value, color, pale_color="#f8fafc", note=""):
+        frame = QFrame(objectName="card"); box = QHBoxLayout(frame); box.setContentsMargins(16, 16, 16, 16); box.setSpacing(12)
+        icon_box = QFrame(); icon_box.setFixedSize(48, 48); icon_box.setStyleSheet(f"background: {pale_color}; border-radius: 12px;")
+        icon_layout = QVBoxLayout(icon_box); icon_layout.setContentsMargins(0, 0, 0, 0)
+        icon = QLabel("●"); icon.setStyleSheet(f"color:{color};font-size:24px"); icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        icon_layout.addWidget(icon); box.addWidget(icon_box)
+        text = QVBoxLayout(); text.setSpacing(4)
+        text.addWidget(QLabel(title, objectName="metricTitle"))
+        val = QLabel(value, objectName="metricValue")
+        val.setStyleSheet("font-size: 20px; font-weight: 800; color: #0f172a;")
+        text.addWidget(val)
+        if note: text.addWidget(QLabel(note, objectName="muted"))
+        box.addLayout(text, 1)
+        return frame
     def reload_cashiers(self):
         with self.session_factory() as session: users = session.execute(select(User.id, User.display_name).order_by(User.display_name)).all()
         self.cashier.blockSignals(True); self.cashier.addItem("All Cashiers", None)
@@ -115,13 +127,18 @@ class SalesPage(QWidget):
         while self.metrics.count():
             item = self.metrics.takeAt(0)
             if item.widget(): item.widget().deleteLater()
-        metrics = [("Today's Sales", money(today_sales), "#1671f8", "Live today"), ("Total Invoices", str(len(all_invoices)), "#10ad68", "All transactions"), ("Paid Invoices", str(paid), "#7b4af5", "Completed"), ("Pending Payments", str(pending), "#f28a16", "Credit invoices"), ("Total Revenue", money(revenue), "#10ad68", "Net active sales")]
+        metrics = [("Today's Sales", money(today_sales), "#1671f8", "#eff6ff", "Live today"), ("Total Invoices", str(len(all_invoices)), "#10b981", "#ecfdf5", "All transactions"), ("Paid Invoices", str(paid), "#8b5cf6", "#f5f3ff", "Completed"), ("Pending Payments", str(pending), "#f59e0b", "#fffbeb", "Credit invoices"), ("Total Revenue", money(revenue), "#10b981", "#ecfdf5", "Net active sales")]
         for column, metric in enumerate(metrics): self.metrics.addWidget(self.card(*metric), 0, column)
         self.table.setRowCount(len(rows))
         for row_number, (invoice, customer_name, cashier_name, item_count) in enumerate(rows):
             values = [invoice.local_invoice_number, invoice.created_at.strftime("%d %b %Y %H:%M"), customer_name or "Walk-in Customer", cashier_name, invoice.payment_method.title(), item_count, money(invoice.total_cents), invoice.status.title()]
             for column, value in enumerate(values):
-                item = QTableWidgetItem(str(value)); item.setData(Qt.ItemDataRole.UserRole, invoice.id if column == 0 else None); self.table.setItem(row_number, column, item)
+                item = QTableWidgetItem(str(value)); item.setData(Qt.ItemDataRole.UserRole, invoice.id if column == 0 else None)
+                if column == 7:
+                    if value == "Paid": item.setForeground(QColor("#10b981"))
+                    elif value == "Pending": item.setForeground(QColor("#f59e0b"))
+                    elif value in ("Cancelled", "Refunded"): item.setForeground(QColor("#ef4444"))
+                self.table.setItem(row_number, column, item)
             actions = QWidget(); action_row = QHBoxLayout(actions); action_row.setContentsMargins(0, 0, 0, 0)
             for text, fn in (("View", self.view_invoice), ("Print", self.print_invoice), ("Cancel", self.cancel_invoice), ("Refund", self.refund_invoice)):
                 button = QPushButton(text); required = {"Cancel": "sales.cancel", "Refund": "sales.refund", "Print": "invoice.reprint"}.get(text)

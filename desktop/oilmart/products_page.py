@@ -152,10 +152,19 @@ class ProductsPage(QWidget):
         root.addLayout(body, 1)
         self.reload_filters(); self.refresh()
 
-    def metric_card(self, title, value, color):
-        card = QFrame(objectName="card"); box = QVBoxLayout(card)
-        icon = QLabel("●"); icon.setStyleSheet(f"color:{color};font-size:20px")
-        box.addWidget(icon); box.addWidget(QLabel(title, objectName="metricTitle")); box.addWidget(QLabel(value, objectName="metricValue")); return card
+    def metric_card(self, title, value, color, pale_color="#f8fafc"):
+        frame = QFrame(objectName="card"); box = QHBoxLayout(frame); box.setContentsMargins(16, 16, 16, 16); box.setSpacing(12)
+        icon_box = QFrame(); icon_box.setFixedSize(48, 48); icon_box.setStyleSheet(f"background: {pale_color}; border-radius: 12px;")
+        icon_layout = QVBoxLayout(icon_box); icon_layout.setContentsMargins(0, 0, 0, 0)
+        icon = QLabel("●"); icon.setStyleSheet(f"color:{color};font-size:24px"); icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        icon_layout.addWidget(icon); box.addWidget(icon_box)
+        text = QVBoxLayout(); text.setSpacing(4)
+        text.addWidget(QLabel(title, objectName="metricTitle"))
+        val = QLabel(value, objectName="metricValue")
+        val.setStyleSheet("font-size: 20px; font-weight: 800; color: #0f172a;")
+        text.addWidget(val)
+        box.addLayout(text, 1)
+        return frame
 
     def reload_filters(self):
         with self.session_factory() as session:
@@ -192,8 +201,8 @@ class ProductsPage(QWidget):
         while self.metrics.count():
             item = self.metrics.takeAt(0)
             if item.widget(): item.widget().deleteLater()
-        for column, metric in enumerate((("Total Products", str(total), "#1671f8"), ("Categories", str(category_count), "#10ad68"),
-                                         ("Low Stock Items", str(low), "#f28a16"), ("Inventory Value", money(value), "#ef4c5d"))):
+        for column, metric in enumerate((("Total Products", str(total), "#1671f8", "#eff6ff"), ("Categories", str(category_count), "#10b981", "#ecfdf5"),
+                                         ("Low Stock Items", str(low), "#f59e0b", "#fffbeb"), ("Inventory Value", money(value), "#ef4444", "#fef2f2"))):
             self.metrics.addWidget(self.metric_card(*metric), 0, column)
         self.table.setRowCount(len(rows))
         for row_number, (product, category_name) in enumerate(rows):
@@ -201,8 +210,14 @@ class ProductsPage(QWidget):
             values = [row_number + 1, product.name, product.barcode, category_name or "Uncategorized", product.brand,
                       money(product.purchase_price_cents), money(product.selling_price_cents), product.stock_quantity, status_text]
             for column, value in enumerate(values):
-                item = QTableWidgetItem(str(value)); item.setData(Qt.ItemDataRole.UserRole, product.id if column == 1 else None); self.table.setItem(row_number, column, item)
+                item = QTableWidgetItem(str(value)); item.setData(Qt.ItemDataRole.UserRole, product.id if column == 1 else None)
+                if column == 8:
+                    if value == "In Stock": item.setForeground(QColor("#10b981"))
+                    elif value == "Low Stock": item.setForeground(QColor("#f59e0b"))
+                    elif value == "Out of Stock": item.setForeground(QColor("#ef4444"))
+                self.table.setItem(row_number, column, item)
             actions = QWidget(); action_row = QHBoxLayout(actions); action_row.setContentsMargins(0, 0, 0, 0)
+
             for text, callback in (("View", self.view_row), ("Edit", self.edit_row), ("Copy", self.copy_row), ("Delete", self.delete_row)):
                 button = QPushButton(text)
                 required = {"Edit": "product.edit", "Copy": "product.add", "Delete": "product.delete"}.get(text)
