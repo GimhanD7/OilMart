@@ -107,8 +107,8 @@ class LoginDialog(QDialog):
         super().__init__()
         self.session_factory = session_factory
         self.user: User | None = None
-        self.setWindowTitle("OilMart POS — Sign In")
-        self.setFixedSize(1000, 650)
+        self.setWindowTitle("OilMart POS - Sign In")
+        self.setFixedSize(1040, 680)
         self.setWindowFlags(self.windowFlags() | Qt.WindowType.CustomizeWindowHint | Qt.WindowType.WindowCloseButtonHint)
         
         def _load_light_style() -> str:
@@ -127,14 +127,17 @@ class LoginDialog(QDialog):
         main_layout.setSpacing(0)
 
         left_pane = QWidget()
-        left_pane.setStyleSheet("background-color: #ffffff;")
+        left_pane.setObjectName("loginPane")
+        left_pane.setStyleSheet("QWidget#loginPane { background-color: #ffffff; }")
         left_layout = QVBoxLayout(left_pane)
-        left_layout.setContentsMargins(60, 60, 60, 60)
-        left_layout.setSpacing(16)
+        left_layout.setContentsMargins(72, 54, 72, 42)
+        left_layout.setSpacing(10)
 
         brand = QHBoxLayout()
-        icon = QLabel("💧")
-        icon.setStyleSheet("font-size: 32px;")
+        icon = QLabel("O")
+        icon.setFixedSize(38, 38)
+        icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        icon.setStyleSheet("background:#1671f8;color:white;border-radius:19px;font-size:20px;font-weight:900;")
         brand_label = QLabel("OilMart POS")
         brand_label.setStyleSheet("font-size: 28px; font-weight: 900; color: #0f172a;")
         brand.addWidget(icon)
@@ -142,7 +145,7 @@ class LoginDialog(QDialog):
         brand.addStretch()
         left_layout.addLayout(brand)
         
-        left_layout.addSpacing(20)
+        left_layout.addSpacing(26)
         
         welcome = QLabel("Welcome back!")
         welcome.setStyleSheet("font-size: 24px; font-weight: bold;")
@@ -151,14 +154,17 @@ class LoginDialog(QDialog):
         sub.setStyleSheet("color: #64748b; font-size: 14px;")
         left_layout.addWidget(sub)
 
-        left_layout.addSpacing(10)
+        left_layout.addSpacing(18)
 
         user_label = QLabel("Username")
         user_label.setStyleSheet("font-size: 13px; font-weight: 600;")
         left_layout.addWidget(user_label)
         self.username = QLineEdit("admin")
         self.username.setPlaceholderText("Enter username")
+        self.username.setFixedHeight(52)
         left_layout.addWidget(self.username)
+
+        left_layout.addSpacing(6)
 
         pass_label = QLabel("Password")
         pass_label.setStyleSheet("font-size: 13px; font-weight: 600;")
@@ -166,6 +172,7 @@ class LoginDialog(QDialog):
         self.password = QLineEdit()
         self.password.setEchoMode(QLineEdit.EchoMode.Password)
         self.password.setPlaceholderText("Enter password")
+        self.password.setFixedHeight(52)
         self.password.returnPressed.connect(self.authenticate)
         left_layout.addWidget(self.password)
 
@@ -173,55 +180,51 @@ class LoginDialog(QDialog):
         rem_check = QCheckBox("Remember me")
         rem_check.setChecked(True)
         options_layout.addWidget(rem_check)
-        forgot_btn = QPushButton("Forgot password?")
-        forgot_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        forgot_btn.setStyleSheet("color: #2563eb; background: transparent; border: none; text-align: right; font-weight: 500;")
-        options_layout.addWidget(forgot_btn, alignment=Qt.AlignmentFlag.AlignRight)
+        options_layout.addStretch()
         left_layout.addLayout(options_layout)
 
         self.error = QLabel("")
+        self.error.setWordWrap(True)
+        self.error.setFixedHeight(24)
         self.error.setStyleSheet("color: #ef4444; font-size: 13px; font-weight: 600;")
         left_layout.addWidget(self.error)
 
-        sign_in = QPushButton("Sign In →")
+        sign_in = QPushButton("Sign In")
         sign_in.setObjectName("signInBtn")
+        sign_in.setFixedHeight(52)
+        sign_in.setStyleSheet("QPushButton { background:#2563eb; color:#ffffff; border:0; border-radius:9px; font-size:15px; font-weight:700; } QPushButton:hover { background:#1d4ed8; } QPushButton:pressed { background:#1e40af; }")
         sign_in.setCursor(Qt.CursorShape.PointingHandCursor)
         sign_in.clicked.connect(self.authenticate)
         left_layout.addWidget(sign_in)
 
-        div_layout = QHBoxLayout()
-        line1 = QFrame(); line1.setFrameShape(QFrame.Shape.HLine); line1.setStyleSheet("color: #e2e8f0;")
-        or_label = QLabel("or"); or_label.setStyleSheet("color: #94a3b8; font-size: 12px;")
-        line2 = QFrame(); line2.setFrameShape(QFrame.Shape.HLine); line2.setStyleSheet("color: #e2e8f0;")
-        div_layout.addWidget(line1); div_layout.addWidget(or_label); div_layout.addWidget(line2)
-        left_layout.addLayout(div_layout)
-
-        qr_btn = QPushButton("Scan QR Code to Login")
-        qr_btn.setObjectName("qrBtn")
-        qr_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        left_layout.addWidget(qr_btn)
-        
         left_layout.addStretch()
 
         footer = QHBoxLayout()
-        f1 = QLabel("© 2026 OilMart POS. All rights reserved.")
+        f1 = QLabel("© 2026 OilMart POS")
         f1.setStyleSheet("color: #94a3b8; font-size: 11px;")
         f2 = QLabel("Version 1.0.0")
         f2.setStyleSheet("color: #94a3b8; font-size: 11px;")
         footer.addWidget(f1); footer.addStretch(); footer.addWidget(f2)
         left_layout.addLayout(footer)
 
-        right_pane = QLabel()
-        right_pane.setStyleSheet("background-color: #f8fafc;")
-        img_path = os.path.join(os.path.dirname(__file__), "assets", "login-promo.png")
-        if os.path.exists(img_path):
-            pixmap = QPixmap(img_path)
-            scaled = pixmap.scaled(500, 650, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation)
-            right_pane.setPixmap(scaled)
-            right_pane.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        else:
-            right_pane.setText("Manage your business with confidence")
-            right_pane.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        right_pane = QWidget(); right_pane.setObjectName("loginPromo")
+        right_pane.setStyleSheet("QWidget#loginPromo { background:#126ff5; } QLabel { color:white; background:transparent; }")
+        promo = QVBoxLayout(right_pane); promo.setContentsMargins(64, 72, 64, 64); promo.setSpacing(18)
+        eyebrow = QLabel("OILMART BUSINESS SYSTEM")
+        eyebrow.setStyleSheet("font-size:12px;font-weight:800;color:#bfdbfe;letter-spacing:1px;")
+        headline = QLabel("Run every sale.\nKnow every number.")
+        headline.setStyleSheet("font-size:34px;font-weight:900;color:white;")
+        message = QLabel("A reliable offline point of sale with inventory, purchasing, customer credit and business reporting in one place.")
+        message.setWordWrap(True); message.setStyleSheet("font-size:15px;line-height:1.5;color:#dbeafe;")
+        promo.addWidget(eyebrow); promo.addWidget(headline); promo.addWidget(message); promo.addSpacing(24)
+        for feature in ("Offline-first sales and receipts", "Live stock movement tracking", "Role-based access and audit history"):
+            label = QLabel(f"✓  {feature}")
+            label.setStyleSheet("font-size:14px;font-weight:600;color:white;padding:12px 14px;background:#247bf5;border-radius:8px;")
+            promo.addWidget(label)
+        promo.addStretch()
+        secure = QLabel("LOCAL DATA  •  SECURE ACCESS  •  FAST CHECKOUT")
+        secure.setStyleSheet("font-size:11px;font-weight:800;color:#bfdbfe;")
+        promo.addWidget(secure)
         
         main_layout.addWidget(left_pane, 1)
         main_layout.addWidget(right_pane, 1)
@@ -774,6 +777,7 @@ class PosWidget(QWidget):
         self.selected_product: Product | None = None
         self.shift_id: int | None = None
         self.terminal_id: int | None = None
+        self.open_product_form_callback = None
         with self.session_factory() as session:
             self.permissions = permission_keys(session, user)
             self.role_name = session.scalar(select(Role.name).where(Role.id == user.role_id)) or "Unknown"
@@ -1034,6 +1038,7 @@ class PosWidget(QWidget):
         while self.product_grid.count():
             item = self.product_grid.takeAt(0)
             if item.widget():
+                item.widget().hide()
                 item.widget().deleteLater()
         columns = 4 if self.width() >= 1050 else 3
         for index, product in enumerate(rows):
@@ -1109,6 +1114,7 @@ class PosWidget(QWidget):
         while self.product_detail_layout.count():
             item = self.product_detail_layout.takeAt(0)
             if item.widget():
+                item.widget().hide()
                 item.widget().deleteLater()
         category_name = next((category.name for category in self.categories
                               if category.id == product.category_id), "Uncategorized")
@@ -1127,6 +1133,9 @@ class PosWidget(QWidget):
         self.product_detail_layout.addWidget(add)
 
     def add_new_product(self):
+        if self.open_product_form_callback is not None:
+            self.open_product_form_callback()
+            return
         barcode, ok = QInputDialog.getText(self, "Add product", "Barcode:")
         if not ok or not barcode.strip(): return
         name, ok = QInputDialog.getText(self, "Add product", "Product name:")

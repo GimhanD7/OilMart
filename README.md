@@ -31,7 +31,9 @@ $env:PYTHONPATH = "$PWD\desktop"
 python -m oilmart
 ```
 
-The first launch seeds an administrator (`admin` / `ChangeMe123!`) and sample products. Change the password before real use.
+The first launch creates the required roles, permissions, product categories, and
+an administrator (`admin` / `ChangeMe123!`). It does not insert demo products or
+sales. The administrator must change the temporary password at first sign-in.
 
 Run tests:
 
@@ -39,6 +41,20 @@ Run tests:
 $env:PYTHONPATH = "$PWD\desktop"
 python -m pytest desktop/tests -q
 ```
+
+## Build the Windows desktop app
+
+Install the development requirements, then run the packaging script:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r .\desktop\requirements-dev.txt
+.\desktop\build_windows.ps1
+```
+
+This produces `desktop\dist\OilMart POS.exe` and creates an **OilMart POS**
+shortcut on the current user's desktop. The app keeps its offline SQLite data
+under the user's application data directory; rebuilding the executable does not
+overwrite business data.
 
 Migrations run automatically when OilMart starts. To check/apply them manually:
 

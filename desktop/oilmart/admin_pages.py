@@ -6,7 +6,7 @@ import shutil
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, or_, select
-from PyQt6.QtCore import QDate, Qt, QPropertyAnimation, QEasingCurve, pyqtProperty, QRect, QSize, QPoint
+from PyQt6.QtCore import QDate, Qt, QPropertyAnimation, QEasingCurve, pyqtProperty, QRect, QSize, QPoint, QPointF
 from PyQt6.QtGui import QPainter, QColor, QPainterPath, QIcon
 from PyQt6.QtWidgets import (QCheckBox, QComboBox, QDateEdit, QDialog, QDialogButtonBox,
     QFileDialog, QFormLayout, QFrame, QGridLayout, QHBoxLayout, QHeaderView, QLabel,
@@ -59,7 +59,7 @@ class LineChartWidget(QWidget):
         path = QPainterPath(); fill_path = QPainterPath()
         
         step_x = pw / (len(self.data_points) - 1) if len(self.data_points) > 1 else pw
-        def pt(i, v): return QPoint(int(margin + i * step_x), int(margin + ph - (v / max_val) * ph))
+        def pt(i, v): return QPointF(float(margin + i * step_x), float(margin + ph - (v / max_val) * ph))
         
         start = pt(0, self.data_points[0])
         path.moveTo(start); fill_path.moveTo(start.x(), margin + ph); fill_path.lineTo(start)
@@ -90,10 +90,6 @@ def metric(title, value, note=""):
     trend = QHBoxLayout(); trend.setContentsMargins(0, 0, 0, 0)
     trend.addWidget(named(QLabel(note), "statNote")); trend.addStretch()
     
-    if "%" in note:
-        badge = named(QLabel(note), "trendUp" if "+" in note or "up" in note.lower() else "trendDown")
-        trend.addWidget(badge)
-        
     box.addLayout(trend); return card
 
 
@@ -163,8 +159,9 @@ class UsersPage(QWidget):
         self.filter=QPushButton("Filter"); filters.addWidget(self.search,1); filters.addWidget(self.filter); root.addLayout(filters)
         
         self.table=QTableWidget(0,7); self.table.setHorizontalHeaderLabels(["User","Role","Phone","Status","Last Login","Username","Action"])
-        self.table.horizontalHeader().setSectionResizeMode(0,QHeaderView.ResizeMode.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(2,QHeaderView.ResizeMode.ResizeToContents)
+        self.table.verticalHeader().setVisible(False)
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.table.horizontalHeader().setMinimumSectionSize(105)
         root.addWidget(self.table,1)
         
         foot=QHBoxLayout(); foot.setContentsMargins(0, 16, 0, 0)
@@ -196,8 +193,13 @@ class UsersPage(QWidget):
     def refresh(self):
         with self.factory() as s:
             all_users=s.scalars(select(User)).all(); rows=s.execute(self.query(s)).all()
-        while self.cards.count(): w=self.cards.takeAt(0).widget(); w.deleteLater() if w else None
-        values=(("Total Users",len(all_users),"All registered users"),("Active Users",sum(u.active for u in all_users),"83.3% of total"),("Inactive Users",sum(not u.active for u in all_users),"16.7% of total"),("Admins",sum(role.lower() in ("administrator","super admin") for _,role in rows),"22.2% of total"))
+        while self.cards.count():
+            w=self.cards.takeAt(0).widget()
+            if w: w.hide(); w.deleteLater()
+        active_count=sum(bool(u.active) for u in all_users); inactive_count=len(all_users)-active_count
+        with self.factory() as s:
+            admin_count=s.scalar(select(func.count(User.id)).join(Role).where(func.lower(Role.name).in_(("administrator","super admin")))) or 0
+        values=(("Total Users",len(all_users),"All registered users"),("Active Users",active_count,"Enabled accounts"),("Inactive Users",inactive_count,"Disabled accounts"),("Admins",admin_count,"Administrator accounts"))
         for c,v in enumerate(values): self.cards.addWidget(metric(v[0],str(v[1]),v[2]),0,c)
         start=self.page*self.page_size
         if start>=len(rows) and self.page: self.page-=1; start=self.page*self.page_size
@@ -281,7 +283,7 @@ class ReportsPage(QWidget):
         # Sales Overview chart
         chart_frame = named(QFrame(), "statCard"); chart_lay = QVBoxLayout(chart_frame)
         chart_lay.addWidget(named(QLabel("Sales Overview"), "settingsSectionTitle"))
-        self.chart = LineChartWidget([50, 120, 80, 160, 90, 140]) # Mock data initially
+        self.chart = LineChartWidget([0, 0])
         chart_lay.addWidget(self.chart); chart_row.addWidget(chart_frame, 2)
         
         # Top Selling Products
@@ -292,7 +294,7 @@ class ReportsPage(QWidget):
         
         root.addLayout(chart_row)
         
-        self.table=QTableWidget(); self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.table=QTableWidget(); self.table.verticalHeader().setVisible(False); self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         root.addWidget(named(QLabel("Report Summary"), "settingsSectionTitle"))
         root.addWidget(self.table,1); self.refresh()
         
@@ -304,21 +306,31 @@ class ReportsPage(QWidget):
             profit=s.scalar(select(func.sum((SaleItem.unit_price_cents-SaleItem.cost_price_cents)*SaleItem.quantity)).where(SaleItem.invoice_id.in_(ids))) if ids else 0
         return invoices,purchases,expenses,profit or 0
     def refresh(self):
-        invoices,purchases,expenses,profit=self.data(); sales=sum(i.total_cents for i in invoices); purchase=sum(p.total_cents for p in purchases); expense=sum(e.amount_cents for e in expenses)
-        while self.cards.count(): w=self.cards.takeAt(0).widget(); w.deleteLater() if w else None
-        
-        # Determine trend signs
-        for c,v in enumerate((("Total Sales",money(sales),"↑ 12.4%"),("Total Purchases",money(purchase),"↑ 8.7%"),("Total Profit",money(profit),"↑ 15.6%"),("Total Expenses",money(expense),"↑ 5.3%"))): 
-            self.cards.addWidget(metric(v[0],v[1],v[2]),0,c)
-            
-        self.table.setColumnCount(5); self.table.setHorizontalHeaderLabels(["Report Type","Count","Total Amount","Last Month","Change"]); rows=[["Total Sales",len(invoices),money(sales),money(sales*0.88),"↑ 12.61%"],["Total Purchases",len(purchases),money(purchase),money(purchase*0.9),"↑ 8.70%"],["Total Profit","-",money(profit),money(profit*0.8),"↑ 19.42%"],["Total Expenses",len(expenses),money(expense),money(expense*0.95),"↑ 5.31%"]]
-        
+        invoices,purchases,expenses,profit=self.data()
+        sales=sum(i.total_cents for i in invoices); purchase=sum(p.total_cents for p in purchases); expense=sum(e.amount_cents for e in expenses)
+        while self.cards.count():
+            w=self.cards.takeAt(0).widget()
+            if w: w.hide(); w.deleteLater()
+        cards=(("Total Sales",money(sales),f"{len(invoices)} invoices"),("Total Purchases",money(purchase),f"{len(purchases)} purchases"),("Total Profit",money(profit),"Sales margin"),("Total Expenses",money(expense),f"{len(expenses)} expenses"))
+        for c,v in enumerate(cards): self.cards.addWidget(metric(v[0],v[1],v[2]),0,c)
+
+        end_date=self.end.date().toPyDate(); start_date=self.start.date().toPyDate()
+        bucket_count=min(max(1,(end_date-start_date).days+1),31); bucket_start=end_date-timedelta(days=bucket_count-1); buckets=[0]*bucket_count
+        for invoice in invoices:
+            idx=(invoice.created_at.date()-bucket_start).days
+            if 0 <= idx < bucket_count: buckets[idx]+=invoice.total_cents
+        self.chart.data_points=buckets; self.chart.update()
+        with self.factory() as s:
+            top=s.execute(select(SaleItem.product_name,func.sum(SaleItem.quantity),func.sum(SaleItem.line_total_cents)).where(SaleItem.invoice_id.in_([i.id for i in invoices])).group_by(SaleItem.product_name).order_by(func.sum(SaleItem.line_total_cents).desc()).limit(5)).all() if invoices else []
+        self.top_list.clear()
+        for name,qty,total in top: self.top_list.addItem(f"{name}   {qty} sold   {money(total or 0)}")
+        if not top: self.top_list.addItem("No sales in this date range")
+
+        self.table.setColumnCount(3); self.table.setHorizontalHeaderLabels(["Report Type","Count","Total Amount"])
+        rows=[["Total Sales",len(invoices),money(sales)],["Total Purchases",len(purchases),money(purchase)],["Total Profit","-",money(profit)],["Total Expenses",len(expenses),money(expense)]]
         self.table.setRowCount(len(rows))
         for r,row in enumerate(rows):
-            for c,v in enumerate(row): 
-                item = QTableWidgetItem(str(v))
-                if "↑" in str(v): item.setForeground(QColor("#10b981"))
-                self.table.setItem(r,c,item)
+            for c,v in enumerate(row): self.table.setItem(r,c,QTableWidgetItem(str(v)))
     def export(self):
         path,_=QFileDialog.getSaveFileName(self,"Export report","sales-report.csv","CSV (*.csv)")
         if not path:return
@@ -355,18 +367,19 @@ class SettingsPage(QWidget):
             s.add(ActivityLog(user_id=self.actor.id,action="updated settings",module="settings",details=", ".join(values)));s.commit()
         QMessageBox.information(self,"Settings","Changes saved.")
     def page(self,title,desc=""):
-        frame=named(QFrame(),"statCard"); box=QVBoxLayout(frame); box.setContentsMargins(30,30,30,30); box.setSpacing(24)
+        frame=named(QFrame(),"statCard"); box=QVBoxLayout(frame); box.setContentsMargins(28,24,28,24); box.setSpacing(8); box.setAlignment(Qt.AlignmentFlag.AlignTop)
         head=QVBoxLayout(); head.setSpacing(4)
         head.addWidget(named(QLabel(title),"settingsSectionTitle"))
         if desc: head.addWidget(named(QLabel(desc),"settingsSectionDesc"))
         box.addLayout(head); return frame,box
     
     def setting_row(self, label, desc, widget):
-        row = named(QFrame(), "settingRow"); lay = QHBoxLayout(row); lay.setContentsMargins(0, 16, 0, 16)
+        row = named(QFrame(), "settingRow"); row.setFixedHeight(64); lay = QHBoxLayout(row); lay.setContentsMargins(0, 6, 0, 6); lay.setSpacing(20)
         text_lay = QVBoxLayout(); text_lay.setSpacing(4)
-        text_lay.addWidget(named(QLabel(label), "settingLabel"))
-        if desc: text_lay.addWidget(named(QLabel(desc), "settingSub"))
-        lay.addLayout(text_lay); lay.addStretch(); lay.addWidget(widget)
+        title=named(QLabel(label), "settingLabel"); title.setStyleSheet("color:#0f172a;font-weight:700;"); text_lay.addWidget(title)
+        if desc:
+            sub=named(QLabel(desc), "settingSub"); sub.setStyleSheet("color:#64748b;"); text_lay.addWidget(sub)
+        lay.addLayout(text_lay,1); widget.setMinimumHeight(38); lay.addWidget(widget,0,Qt.AlignmentFlag.AlignVCenter)
         return row
     
     def general_page(self):
@@ -386,7 +399,7 @@ class SettingsPage(QWidget):
         foot=QHBoxLayout(); foot.addStretch()
         save=QPushButton("Save Changes");save.setObjectName("primaryButton")
         save.clicked.connect(lambda:self.put({**{k.lower().replace(' ','_'):v.currentText() for k,v in self.general.items()},**{k:int(v.isChecked()) for k,v in self.toggles.items()}}))
-        foot.addWidget(save); box.addLayout(foot); box.addStretch(); return page
+        foot.addWidget(save); box.addLayout(foot); return page
     def business_page(self):
         page,box=self.page("Business Information"); form=QFormLayout(); self.business={}
         with self.factory() as s:b=s.get(Branch,self.actor.branch_id)

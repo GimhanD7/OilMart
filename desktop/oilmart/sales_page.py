@@ -145,7 +145,7 @@ class SalesPage(QWidget):
         root.addLayout(self.metrics)
         body = QHBoxLayout()
         main = QVBoxLayout()
-        filters = QHBoxLayout()
+        filters = QGridLayout(); filters.setHorizontalSpacing(10); filters.setVerticalSpacing(10)
         self.search = QLineEdit()
         self.search.setPlaceholderText("Search invoice, customer or product...")
         self.search.textChanged.connect(self.refresh)
@@ -165,15 +165,12 @@ class SalesPage(QWidget):
         self.status = QComboBox()
         self.status.addItems(["All Status", "Paid", "Pending", "Cancelled", "Refunded"])
         self.status.currentIndexChanged.connect(self.refresh)
-        for widget in (
-            self.search,
-            self.from_date,
-            self.to_date,
-            self.method,
-            self.cashier,
-            self.status,
-        ):
-            filters.addWidget(widget)
+        self.search.setMinimumWidth(280)
+        self.from_date.setMinimumWidth(145); self.to_date.setMinimumWidth(145)
+        self.method.setMinimumWidth(170); self.cashier.setMinimumWidth(150); self.status.setMinimumWidth(140)
+        filters.addWidget(self.search, 0, 0, 1, 5)
+        filters.addWidget(self.from_date, 1, 0); filters.addWidget(self.to_date, 1, 1)
+        filters.addWidget(self.method, 1, 2); filters.addWidget(self.cashier, 1, 3); filters.addWidget(self.status, 1, 4)
         new_sale = QPushButton("+ New Sale")
         new_sale.setObjectName("primaryButton")
         new_sale.clicked.connect(self.new_sale)
@@ -181,9 +178,9 @@ class SalesPage(QWidget):
         export.clicked.connect(self.export_csv)
         print_report = QPushButton("Print Report")
         print_report.clicked.connect(self.print_report)
-        filters.addWidget(new_sale)
-        filters.addWidget(export)
-        filters.addWidget(print_report)
+        filters.addWidget(new_sale, 2, 0)
+        filters.addWidget(export, 2, 1)
+        filters.addWidget(print_report, 2, 2)
         main.addLayout(filters)
         self.table = QTableWidget(0, 9)
         self.table.setHorizontalHeaderLabels(
@@ -202,13 +199,18 @@ class SalesPage(QWidget):
         self.table.horizontalHeader().setSectionResizeMode(
             0, QHeaderView.ResizeMode.Stretch
         )
+        self.table.horizontalHeader().setSectionResizeMode(8, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().setMinimumSectionSize(78)
+        self.table.verticalHeader().setVisible(False)
+        self.table.verticalHeader().setDefaultSectionSize(46)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         main.addWidget(self.table)
         self.result_label = QLabel()
         main.addWidget(self.result_label)
         body.addLayout(main, 4)
-        right = QVBoxLayout()
+        right_container = QWidget(); right_container.setFixedWidth(300)
+        right = QVBoxLayout(right_container); right.setContentsMargins(0, 0, 0, 0)
         trend_panel = QFrame(); trend_panel.setObjectName("panel")
         trend_box = QVBoxLayout(trend_panel)
         trend_box.addWidget(QLabel("Sales Trend (Last 7 Days)"))
@@ -228,7 +230,7 @@ class SalesPage(QWidget):
         best_box.addWidget(self.best_label)
         right.addWidget(best_panel)
         right.addStretch()
-        body.addLayout(right, 1)
+        body.addWidget(right_container, 1)
         root.addLayout(body, 1)
         self.reload_cashiers()
         self.refresh()
@@ -332,6 +334,7 @@ class SalesPage(QWidget):
         while self.metrics.count():
             item = self.metrics.takeAt(0)
             if item.widget():
+                item.widget().hide()
                 item.widget().deleteLater()
         metrics = [
             ("Today's Sales", money(today_sales), "#1671f8", "#eff6ff", "Live today"),
@@ -385,6 +388,7 @@ class SalesPage(QWidget):
                 ("Refund", self.refund_invoice),
             ):
                 button = QPushButton(text)
+                button.setFixedHeight(32); button.setMinimumWidth(54); button.setStyleSheet("padding: 3px 8px;")
                 required = {
                     "Cancel": "sales.cancel",
                     "Refund": "sales.refund",
@@ -410,11 +414,13 @@ class SalesPage(QWidget):
         while self.payment_box.count() > 1:
             item = self.payment_box.takeAt(1)
             if item.widget():
+                item.widget().hide()
                 item.widget().deleteLater()
             elif item.layout():
                 while item.layout().count():
                     child = item.layout().takeAt(0)
                     if child.widget():
+                        child.widget().hide()
                         child.widget().deleteLater()
         for method, amount in payment_rows:
             row = QHBoxLayout()

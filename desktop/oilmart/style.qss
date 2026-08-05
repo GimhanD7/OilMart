@@ -1,4 +1,4 @@
-QWidget { font-family: 'Inter', 'Segoe UI', sans-serif; font-size: 13px; color: #0f172a; background-color: #f8fafc; }
+QWidget { font-family: "Segoe UI"; font-size: 13px; color: #0f172a; background-color: #f8fafc; }
 QMainWindow { background-color: #f8fafc; }
 QDialog { background-color: #ffffff; }
 QLabel { background: transparent; }

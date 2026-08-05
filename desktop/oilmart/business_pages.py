@@ -26,7 +26,9 @@ def named(widget, object_name):
 class PartnerDialog(QDialog):
     def __init__(self, kind, partner=None, parent=None):
         super().__init__(parent); self.kind = kind; self.setWindowTitle(f"{'Edit' if partner else 'Add'} {kind.title()}")
-        form = QFormLayout(self); self.name = QLineEdit(partner.name if partner else ""); self.phone = QLineEdit(partner.phone if partner else ""); self.email = QLineEdit(partner.email if partner else ""); self.address = QLineEdit(partner.address if partner else "")
+        self.setMinimumWidth(560)
+        form = QFormLayout(self); form.setContentsMargins(24, 24, 24, 24); form.setHorizontalSpacing(24); form.setVerticalSpacing(14)
+        self.name = QLineEdit(partner.name if partner else ""); self.phone = QLineEdit(partner.phone if partner else ""); self.email = QLineEdit(partner.email if partner else ""); self.address = QLineEdit(partner.address if partner else "")
         self.group = QLineEdit((partner.customer_group if kind == "customer" else partner.category) if partner else ("Retail" if kind == "customer" else "General"))
         self.notes = QLineEdit(partner.notes if partner else "")
         for label, widget in (("Name", self.name), ("Group" if kind == "customer" else "Category", self.group), ("Phone", self.phone), ("Email", self.email), ("Address", self.address), ("Notes", self.notes)): form.addRow(label, widget)
@@ -71,7 +73,7 @@ class DirectoryPage(QWidget):
         root = QVBoxLayout(self); root.setContentsMargins(20, 16, 20, 18); root.setSpacing(14)
         heading = QHBoxLayout(); heading.addWidget(named(QLabel(f"{kind.title()}s"), "title")); heading.addWidget(named(QLabel(f"Manage {kind} accounts and balances"), "muted")); heading.addStretch(); add = QPushButton(f"+ Add {kind.title()}"); add.setObjectName("primaryButton"); add.clicked.connect(self.add_partner); import_button = QPushButton("Import"); import_button.clicked.connect(self.import_csv); export_button = QPushButton("Export"); export_button.clicked.connect(self.export_csv); heading.addWidget(add); heading.addWidget(import_button); heading.addWidget(export_button); root.addLayout(heading)
         self.metrics = QGridLayout(); root.addLayout(self.metrics); filters = QHBoxLayout(); self.search = QLineEdit(); self.search.setPlaceholderText(f"Search {kind} by name, phone or email..."); self.search.textChanged.connect(self.refresh); self.group = QComboBox(); self.group.currentIndexChanged.connect(self.refresh); self.status = QComboBox(); self.status.addItems(["All Status", "Active", "Disabled"]); self.status.currentIndexChanged.connect(self.refresh); filters.addWidget(self.search, 1); filters.addWidget(self.group); filters.addWidget(self.status); root.addLayout(filters)
-        self.table = QTableWidget(0, 8); self.table.setHorizontalHeaderLabels(["#", kind.title(), "Group" if kind == "customer" else "Category", "Phone", "Email", "Outstanding", "Status", "Actions"]); self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch); root.addWidget(self.table, 1); self.result = QLabel(); root.addWidget(self.result); self.reload_groups(); self.refresh()
+        self.table = QTableWidget(0, 8); self.table.setHorizontalHeaderLabels(["#", kind.title(), "Group" if kind == "customer" else "Category", "Phone", "Email", "Outstanding", "Status", "Actions"]); self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch); self.table.horizontalHeader().setSectionResizeMode(7, QHeaderView.ResizeMode.ResizeToContents); self.table.horizontalHeader().setMinimumSectionSize(80); self.table.verticalHeader().setVisible(False); self.table.verticalHeader().setDefaultSectionSize(46); root.addWidget(self.table, 1); self.result = QLabel(); root.addWidget(self.result); self.reload_groups(); self.refresh()
     def reload_groups(self):
         field = Customer.customer_group if self.kind == "customer" else Supplier.category
         with self.session_factory() as session: groups = session.scalars(select(field).distinct().order_by(field)).all()
@@ -94,7 +96,7 @@ class DirectoryPage(QWidget):
         active = sum(p.active for p in partners); credit = sum(balances[p.id] > 0 for p in partners)
         while self.metrics.count():
             item = self.metrics.takeAt(0)
-            if item.widget(): item.widget().deleteLater()
+            if item.widget(): item.widget().hide(); item.widget().deleteLater()
         for col, (title, value, color) in enumerate(((f"Total {self.kind.title()}s", str(len(partners)), "#1671f8"), ("Active", str(active), "#10ad68"), ("Credit Accounts", str(credit), "#f28a16"), ("Total Paid", money(total_received), "#7b4af5"))):
             card = named(QFrame(), "card"); box = QVBoxLayout(card); dot = QLabel("●"); dot.setStyleSheet(f"color:{color};font-size:20px"); box.addWidget(dot); box.addWidget(named(QLabel(title), "metricTitle")); box.addWidget(named(QLabel(value), "metricValue")); self.metrics.addWidget(card, 0, col)
         self.table.setRowCount(len(partners))
@@ -201,7 +203,7 @@ class PurchasesPage(QWidget):
         total = sum(p.total_cents for p,_,_ in rows); paid = sum(p.paid_cents for p,_,_ in rows); due = total-paid
         while self.metrics.count():
             item=self.metrics.takeAt(0)
-            if item.widget(): item.widget().deleteLater()
+            if item.widget(): item.widget().hide(); item.widget().deleteLater()
         for c,(title,value) in enumerate((("Total Purchases",money(total)),("Total Paid",money(paid)),("Total Due",money(due)),("Total Invoices",str(len(rows))))): card=named(QFrame(), "card"); box=QVBoxLayout(card); box.addWidget(named(QLabel(title), "metricTitle")); box.addWidget(named(QLabel(value), "metricValue")); self.metrics.addWidget(card,0,c)
         self.table.setRowCount(len(rows))
         for r,(purchase,supplier,count) in enumerate(rows):

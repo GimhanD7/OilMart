@@ -11,7 +11,7 @@ PERMISSIONS = ["dashboard.view", "reports.view", "sales.create", "sales.edit", "
  "user.delete", "user.password", "user.roles", "settings.bill", "settings.system", "settings.backup"]
 
 
-def seed(session):
+def seed(session, *, include_demo_data: bool = True):
     if session.scalar(select(Branch.id).limit(1)):
         categories = {category.name: category for category in session.scalars(select(Category)).all()}
         for name in ("Engine Oils", "Gear Oils", "Coolants", "Brake Fluids", "ATF Oils", "Filters", "Other"):
@@ -57,9 +57,10 @@ def seed(session):
     categories = [Category(name=name) for name in
                   ("Engine Oils", "Gear Oils", "Coolants", "Brake Fluids", "ATF Oils", "Filters", "Other")]
     session.add_all(categories); session.flush()
-    engine_oils = categories[0]
-    session.add_all([
-        Product(barcode="100001", name="Engine Oil 1L", category_id=engine_oils.id, brand="OilMart", purchase_price_cents=180000, selling_price_cents=220000, stock_quantity=40),
-        Product(barcode="100002", name="Engine Oil 4L", category_id=engine_oils.id, brand="OilMart", purchase_price_cents=620000, selling_price_cents=750000, stock_quantity=20),
-    ])
+    if include_demo_data:
+        engine_oils = categories[0]
+        session.add_all([
+            Product(barcode="100001", name="Engine Oil 1L", category_id=engine_oils.id, brand="OilMart", purchase_price_cents=180000, selling_price_cents=220000, stock_quantity=40),
+            Product(barcode="100002", name="Engine Oil 4L", category_id=engine_oils.id, brand="OilMart", purchase_price_cents=620000, selling_price_cents=750000, stock_quantity=20),
+        ])
     session.commit()

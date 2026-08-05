@@ -118,6 +118,24 @@ def _administration_pages(connection: Connection) -> None:
     Base.metadata.tables["expenses"].create(connection, checkfirst=True)
 
 
+def _remove_untouched_legacy_demo_products(connection: Connection) -> None:
+    """Remove only the two unmistakable, unreferenced products from old demo builds."""
+    connection.execute(text("""
+        DELETE FROM products
+        WHERE (
+            (barcode='100001' AND name='Engine Oil 1L' AND purchase_price_cents=180000
+             AND selling_price_cents=220000 AND stock_quantity=40)
+            OR
+            (barcode='100002' AND name='Engine Oil 4L' AND purchase_price_cents=620000
+             AND selling_price_cents=750000 AND stock_quantity=20)
+        )
+        AND COALESCE(brand, '') IN ('', 'OilMart')
+        AND NOT EXISTS (SELECT 1 FROM sale_items WHERE sale_items.product_id=products.id)
+        AND NOT EXISTS (SELECT 1 FROM purchase_items WHERE purchase_items.product_id=products.id)
+        AND NOT EXISTS (SELECT 1 FROM inventory_movements WHERE inventory_movements.product_id=products.id)
+    """))
+
+
 # Append new migrations here. Released migrations must never be edited.
 MIGRATIONS: tuple[Migration, ...] = (
     (1, "initial_schema", _initial_schema),
@@ -130,6 +148,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     (8, "invoice_status", _invoice_status),
     (9, "business_partners_and_purchases", _business_partners_and_purchases),
     (10, "administration_pages", _administration_pages),
+    (11, "remove_untouched_legacy_demo_products", _remove_untouched_legacy_demo_products),
 )
 
 

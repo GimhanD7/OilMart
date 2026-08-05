@@ -1,5 +1,5 @@
 QDialog { background-color: #f8fafc; }
-QLabel { color: #1e293b; font-family: 'Inter', 'Segoe UI', sans-serif; }
+QLabel { color: #1e293b; font-family: "Segoe UI"; }
 QLineEdit { 
     padding: 6px 16px; 
     min-height: 32px;
@@ -13,14 +13,15 @@ QLineEdit:focus { border: 1px solid #3b82f6; outline: none; }
 QPushButton#signInBtn { 
     background-color: #2563eb; 
     color: white; 
-    border: none; 
+    border: 1px solid #2563eb;
     border-radius: 8px; 
     padding: 8px; 
-    min-height: 32px;
+    min-height: 42px;
     font-weight: bold; 
     font-size: 15px; 
 }
-QPushButton#signInBtn:hover { background-color: #1d4ed8; }
+QPushButton#signInBtn:pressed { background-color: #1e40af; color: #ffffff; }
+QPushButton#signInBtn:hover { background-color: #1d4ed8; border: 1px solid #1d4ed8; }
 QPushButton#qrBtn {
     background-color: transparent;
     color: #475569;

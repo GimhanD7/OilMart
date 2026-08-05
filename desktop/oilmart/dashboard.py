@@ -1,8 +1,8 @@
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, select
-from PyQt6.QtCore import QByteArray, Qt
+from PyQt6.QtCore import QByteArray, QDateTime, QTimer, Qt
 from PyQt6.QtGui import QColor, QIcon, QPainter, QPixmap, QPen
 from PyQt6.QtSvg import QSvgRenderer
 from PyQt6.QtWidgets import (
@@ -17,6 +17,7 @@ from .ui import AdminDialog, PosWidget, UserManagementDialog, money
 from .products_page import ProductsPage
 from .sales_page import SalesPage
 from .business_pages import DirectoryPage, PurchasesPage
+from .inventory_page import InventoryPage
 from .admin_pages import ReportsPage, SettingsPage, UsersPage
 
 
@@ -62,15 +63,31 @@ def line_icon(name: str, color: str = "#667594", size: int = 22) -> QIcon:
 
 
 class SalesOverviewChart(QWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent); self.values = [10, 15, 8, 18, 12, 24]; self.setMinimumHeight(200)
+    def __init__(self, values=None, parent=None):
+        super().__init__(parent)
+        self.values = list(values or [0] * 7)
+        self.labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        self.setMinimumHeight(200)
+
+    def set_values(self, values):
+        self.values = list(values[:7]) + [0] * max(0, 7 - len(values))
+        self.update()
+
     def paintEvent(self, event):
         painter = QPainter(self); painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         rect = self.rect().adjusted(20, 20, -20, -30)
         painter.setPen(QPen(QColor("#f1f5f9"), 1))
         for i in range(5):
             y = rect.top() + i * rect.height() / 4; painter.drawLine(rect.left(), int(y), rect.right(), int(y))
-        maximum = max(self.values); step = rect.width() / max(len(self.values) - 1, 1)
+        maximum = max(self.values) if self.values else 0
+        step = rect.width() / 6
+        if maximum <= 0:
+            painter.setPen(QColor("#94a3b8"))
+            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, "No sales recorded this week")
+            painter.setPen(QColor("#64748b"))
+            for i, label in enumerate(self.labels):
+                painter.drawText(int(rect.left() + i * step - 12), int(rect.bottom() + 20), label)
+            return
         points = [(int(rect.left() + i * step), int(rect.bottom() - (value / maximum) * rect.height())) for i, value in enumerate(self.values)]
         
         from PyQt6.QtGui import QPolygonF, QBrush
@@ -86,15 +103,16 @@ class SalesOverviewChart(QWidget):
         for x, y in points: painter.drawEllipse(x - 4, y - 4, 8, 8)
         
         painter.setPen(QColor("#64748b"))
-        labels = ["Mon", "Tue", "Wed", "Fri", "Sat", "Sun"]
-        for i, label in enumerate(labels):
+        for i, label in enumerate(self.labels):
             painter.drawText(points[i][0] - 10, int(rect.bottom() + 20), label)
 
 def table(headers, rows):
     widget = QTableWidget(len(rows), len(headers))
     widget.setHorizontalHeaderLabels(headers)
-    widget.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+    widget.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+    widget.horizontalHeader().setMinimumSectionSize(72)
     widget.verticalHeader().setVisible(False)
+    widget.verticalHeader().setDefaultSectionSize(42)
     widget.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
     for row_number, values in enumerate(rows):
         for column, value in enumerate(values):
@@ -122,6 +140,7 @@ class DashboardWidget(QWidget):
         while self.layout.count():
             item = self.layout.takeAt(0)
             if item.widget():
+                item.widget().hide()
                 item.widget().deleteLater()
             elif item.layout():
                 self.clear_layout(item.layout())
@@ -130,6 +149,7 @@ class DashboardWidget(QWidget):
         while layout.count():
             item = layout.takeAt(0)
             if item.widget():
+                item.widget().hide()
                 item.widget().deleteLater()
             elif item.layout():
                 self.clear_layout(item.layout())
@@ -181,10 +201,18 @@ class DashboardWidget(QWidget):
 
     def refresh(self):
         self.clear()
-        today = datetime.now(timezone.utc).date()
+        today = datetime.now().astimezone().date()
+        week_start = today - timedelta(days=today.weekday())
+        last_week_start = week_start - timedelta(days=7)
+        next_week_start = week_start + timedelta(days=7)
+        active_statuses = ("paid", "pending")
         with self.session_factory() as session:
-            invoices = session.scalars(select(Invoice).order_by(Invoice.created_at.desc()).limit(100)).all()
-            recent = invoices[:5]
+            recent = session.scalars(select(Invoice).order_by(Invoice.created_at.desc()).limit(5)).all()
+            period_invoices = session.scalars(select(Invoice).where(
+                Invoice.status.in_(active_statuses),
+                Invoice.created_at >= datetime.combine(last_week_start, datetime.min.time()),
+                Invoice.created_at < datetime.combine(next_week_start, datetime.min.time()),
+            )).all()
             invoice_count = session.scalar(select(func.count(Invoice.id))) or 0
             customer_count = session.scalar(select(func.count(Customer.id))) or 0
             low = session.scalars(select(Product).where(
@@ -195,14 +223,28 @@ class DashboardWidget(QWidget):
             )) or 0
             top = session.execute(select(
                 SaleItem.product_name, func.sum(SaleItem.quantity), func.sum(SaleItem.line_total_cents)
+            ).join(Invoice, Invoice.id == SaleItem.invoice_id).where(
+                Invoice.status.in_(active_statuses)
             ).group_by(SaleItem.product_name).order_by(func.sum(SaleItem.quantity).desc()).limit(5)).all()
             payments = session.execute(select(
                 Payment.method, func.sum(Payment.amount_cents)
+            ).join(Invoice, Invoice.id == Payment.invoice_id).where(
+                Invoice.status.in_(active_statuses)
             ).group_by(Payment.method)).all()
             profit = session.scalar(select(func.sum(
                 (SaleItem.unit_price_cents - SaleItem.cost_price_cents) * SaleItem.quantity
-            ))) or 0
-        today_sales = sum(i.total_cents for i in invoices if i.created_at.date() == today)
+            )).join(Invoice, Invoice.id == SaleItem.invoice_id).where(Invoice.status.in_(active_statuses))) or 0
+        current_daily = [0] * 7
+        last_daily = [0] * 7
+        for invoice in period_invoices:
+            invoice_date = invoice.created_at.date()
+            if week_start <= invoice_date < next_week_start:
+                current_daily[(invoice_date - week_start).days] += invoice.total_cents
+            elif last_week_start <= invoice_date < week_start:
+                last_daily[(invoice_date - last_week_start).days] += invoice.total_cents
+        today_sales = current_daily[today.weekday()]
+        this_week_sales = sum(current_daily)
+        last_week_sales = sum(last_daily)
         heading = QHBoxLayout()
         dashboard_title = QLabel("Dashboard"); dashboard_title.setObjectName("title"); heading.addWidget(dashboard_title)
         dashboard_subtitle = QLabel("Overview of your business"); dashboard_subtitle.setObjectName("muted"); heading.addWidget(dashboard_subtitle)
@@ -235,22 +277,29 @@ class DashboardWidget(QWidget):
         combo.setStyleSheet("border: 1px solid #e2e8f0; border-radius: 6px; padding: 4px 8px; font-size: 12px; color: #475569; background: white;")
         sales_header.addWidget(combo)
         sales_box.addLayout(sales_header)
-        sales_box.addWidget(SalesOverviewChart())
+        sales_box.addWidget(SalesOverviewChart(current_daily))
         
         stats_row = QHBoxLayout()
-        tws = QVBoxLayout(); tws_label = QLabel("This Week Sales"); tws_label.setObjectName("muted"); tws.addWidget(tws_label); v1 = QLabel(money(today_sales * 5)); v1.setStyleSheet("font-size: 16px; font-weight: 800; color: #0f172a;"); tws.addWidget(v1)
-        lws = QVBoxLayout(); lws_label = QLabel("Last Week Sales"); lws_label.setObjectName("muted"); lws.addWidget(lws_label); v2 = QLabel(money(today_sales * 4.3)); v2.setStyleSheet("font-size: 16px; font-weight: 800; color: #0f172a;"); lws.addWidget(v2)
+        tws = QVBoxLayout(); tws_label = QLabel("This Week Sales"); tws_label.setObjectName("muted"); tws.addWidget(tws_label); v1 = QLabel(money(this_week_sales)); v1.setStyleSheet("font-size: 16px; font-weight: 800; color: #0f172a;"); tws.addWidget(v1)
+        lws = QVBoxLayout(); lws_label = QLabel("Last Week Sales"); lws_label.setObjectName("muted"); lws.addWidget(lws_label); v2 = QLabel(money(last_week_sales)); v2.setStyleSheet("font-size: 16px; font-weight: 800; color: #0f172a;"); lws.addWidget(v2)
         stats_row.addLayout(tws); stats_row.addLayout(lws)
-        trend_lbl = QLabel("▲ 14.9%"); trend_lbl.setStyleSheet("color: #10b981; background: #d1fae5; border-radius: 4px; padding: 2px 6px; font-weight: 700; font-size: 11px;")
+        if last_week_sales:
+            change = ((this_week_sales - last_week_sales) / last_week_sales) * 100
+            trend_text = f"{'▲' if change >= 0 else '▼'} {abs(change):.1f}%"
+            trend_color, trend_bg = ("#059669", "#d1fae5") if change >= 0 else ("#dc2626", "#fee2e2")
+        elif this_week_sales:
+            trend_text, trend_color, trend_bg = "New sales", "#2563eb", "#dbeafe"
+        else:
+            trend_text, trend_color, trend_bg = "No sales yet", "#64748b", "#f1f5f9"
+        trend_lbl = QLabel(trend_text); trend_lbl.setStyleSheet(f"color: {trend_color}; background: {trend_bg}; border-radius: 4px; padding: 6px 10px; font-weight: 700; font-size: 11px;")
         stats_row.addWidget(trend_lbl)
         sales_box.addLayout(stats_row)
         
         middle.addWidget(sales_panel, 0, 0, 1, 2)
         
         middle.addWidget(self.panel("Recent Invoices", table(
-            ["Invoice", "Total", "Status", "Date"],
-            [[i.local_invoice_number, money(i.total_cents), "Paid" if i.status == "paid" else "Pending",
-              i.created_at.strftime("%d %b %H:%M")] for i in recent]
+            ["Invoice", "Total", "Status"],
+            [[i.local_invoice_number, money(i.total_cents), "Paid" if i.status == "paid" else "Pending"] for i in recent]
         )), 0, 2)
         middle.addWidget(self.panel("Top Selling Products", table(
             ["Product", "Qty", "Sales"],
@@ -286,20 +335,20 @@ class MainWindow(QMainWindow):
             self.terminal_name = f"{terminal.code} - Main Terminal" if terminal else "No terminal"
         self.setWindowTitle("OilMart POS - Dashboard")
         self.resize(1440, 900)
-        self.setMinimumSize(1080, 700)
+        self.setMinimumSize(1180, 760)
         self.setStyleSheet(STYLE)
         root_widget = QWidget()
         root = QHBoxLayout(root_widget); root.setContentsMargins(0, 0, 0, 0); root.setSpacing(0)
-        sidebar = QFrame(); sidebar.setObjectName("sidebar"); sidebar.setFixedWidth(215)
-        side = QVBoxLayout(sidebar); side.setContentsMargins(12, 20, 12, 18)
-        brand_row = QHBoxLayout()
+        sidebar = QFrame(); sidebar.setObjectName("sidebar"); sidebar.setFixedWidth(225)
+        side = QVBoxLayout(sidebar); side.setContentsMargins(12, 16, 12, 12)
+        brand_row = QHBoxLayout(); brand_row.setSpacing(5)
         brand_row.setContentsMargins(16, 0, 0, 12)
         drop = QLabel()
         drop.setPixmap(line_icon("drop", "#126ff5", 31).pixmap(31, 31))
         brand_row.addWidget(drop)
         brand_row.addSpacing(5)
-        brand_name = QLabel("OilMart"); brand_name.setObjectName("brand"); brand_row.addWidget(brand_name)
-        brand_pos = QLabel("POS"); brand_pos.setObjectName("brandPos"); brand_row.addWidget(brand_pos)
+        brand_name = QLabel("OilMart"); brand_name.setObjectName("brand"); brand_name.setMinimumWidth(82); brand_row.addWidget(brand_name)
+        brand_pos = QLabel("POS"); brand_pos.setObjectName("brandPos"); brand_pos.setMinimumWidth(42); brand_row.addWidget(brand_pos)
         brand_row.addStretch()
         side.addLayout(brand_row); side.addSpacing(12)
         self.nav = QListWidget()
@@ -325,22 +374,32 @@ class MainWindow(QMainWindow):
         logout.clicked.connect(self.close)
         side.addWidget(logout); root.addWidget(sidebar)
         content = QVBoxLayout(); content.setContentsMargins(0, 0, 0, 0); content.setSpacing(0)
-        topbar = QFrame(); topbar.setObjectName("topbar"); topbar.setFixedHeight(62)
-        top = QHBoxLayout(topbar); top.setContentsMargins(22, 0, 26, 0)
-        top.addWidget(QLabel("☰")); top.addStretch(); top.addWidget(QLabel(self.terminal_name)); top.addSpacing(24)
-        top.addWidget(QLabel(f"👤  {user.display_name}\n     {self.role_name}")); content.addWidget(topbar)
+        topbar = QFrame(); topbar.setObjectName("topbar"); topbar.setFixedHeight(76)
+        top = QHBoxLayout(topbar); top.setContentsMargins(22, 0, 22, 0); top.setSpacing(14)
+        location = QLabel(self.terminal_name); location.setObjectName("topbarTerminal")
+        location.setFixedHeight(38); location.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        top.addWidget(location); top.addStretch()
+        self.clock = QLabel(); self.clock.setObjectName("topbarClock"); self.clock.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        top.addWidget(self.clock)
+        user_icon = QLabel(); user_icon.setPixmap(line_icon("users", "#334155", 24).pixmap(24, 24)); top.addWidget(user_icon)
+        identity = QLabel(f"{user.display_name}\n{self.role_name}"); identity.setObjectName("topbarUser"); top.addWidget(identity)
+        top_logout = QPushButton("Logout"); top_logout.setObjectName("topbarLogout"); top_logout.clicked.connect(self.close); top.addWidget(top_logout)
+        self.clock_timer = QTimer(self); self.clock_timer.timeout.connect(self.update_clock); self.clock_timer.start(1000); self.update_clock()
+        content.addWidget(topbar)
         self.stack = QStackedWidget(); self.dashboard_view = DashboardWidget(session_factory)
         self.pos_view = PosWidget(session_factory, user)
         self.products_view = ProductsPage(session_factory, user)
+        self.pos_view.open_product_form_callback = self.open_product_form
         self.sales_view = SalesPage(session_factory, user, self.open_pos_page)
         self.purchases_view = PurchasesPage(session_factory, user)
         self.customers_view = DirectoryPage(session_factory, user, "customer")
         self.suppliers_view = DirectoryPage(session_factory, user, "supplier")
+        self.inventory_view = InventoryPage(session_factory, user)
         self.reports_view = ReportsPage(session_factory, user)
         self.users_view = UsersPage(session_factory, user)
         self.settings_view = SettingsPage(session_factory, user)
         for page in (self.dashboard_view, self.pos_view, self.products_view, self.sales_view,
-                     self.purchases_view, self.customers_view, self.suppliers_view,
+                     self.purchases_view, self.customers_view, self.suppliers_view, self.inventory_view,
                      self.reports_view, self.users_view, self.settings_view):
             self.stack.addWidget(page)
         content.addWidget(self.stack); root.addLayout(content, 1); self.setCentralWidget(root_widget)
@@ -370,6 +429,8 @@ class MainWindow(QMainWindow):
             self.customers_view.reload_groups(); self.customers_view.refresh(); self.stack.setCurrentWidget(self.customers_view)
         elif page == "Suppliers":
             self.suppliers_view.reload_groups(); self.suppliers_view.refresh(); self.stack.setCurrentWidget(self.suppliers_view)
+        elif page == "Inventory":
+            self.inventory_view.refresh(); self.stack.setCurrentWidget(self.inventory_view)
         elif page == "Reports":
             self.reports_view.refresh(); self.stack.setCurrentWidget(self.reports_view)
         elif page == "Users":
@@ -383,6 +444,18 @@ class MainWindow(QMainWindow):
     def open_pos_page(self):
         if "POS" in self.pages:
             self.nav.setCurrentRow(self.pages.index("POS"))
+
+    def open_product_form(self):
+        if "Products" not in self.pages:
+            return
+        self.nav.setCurrentRow(self.pages.index("Products"))
+        self.products_view.add_product()
+        self.products_view.reload_filters(); self.products_view.refresh()
+        self.pos_view.reload_categories(); self.pos_view.search_products()
+
+    def update_clock(self):
+        now = QDateTime.currentDateTime()
+        self.clock.setText(now.toString("ddd, dd MMM yyyy\nh:mm:ss AP"))
 
     def ensure_shift(self):
         return True

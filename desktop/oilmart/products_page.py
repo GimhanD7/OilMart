@@ -111,44 +111,57 @@ class ProductsPage(QWidget):
         root.addLayout(heading)
         self.metrics = QGridLayout(); root.addLayout(self.metrics)
         body = QHBoxLayout(); body.setSpacing(14)
-        main = QVBoxLayout(); filters = QHBoxLayout()
+        main = QVBoxLayout(); filters = QGridLayout(); filters.setHorizontalSpacing(10); filters.setVerticalSpacing(10)
         self.search = QLineEdit(); self.search.setPlaceholderText("Scan barcode or search product..."); self.search.textChanged.connect(self.refresh)
         self.category = QComboBox(); self.category.currentIndexChanged.connect(self.refresh)
         self.stock_status = QComboBox(); self.stock_status.addItems(["All Stock Status", "In Stock", "Low Stock", "Out of Stock"]); self.stock_status.currentIndexChanged.connect(self.refresh)
         self.brand = QComboBox(); self.brand.currentIndexChanged.connect(self.refresh)
-        filters.addWidget(self.search, 1); filters.addWidget(self.category); filters.addWidget(self.stock_status); filters.addWidget(self.brand)
+        self.search.setMinimumWidth(300)
+        for control in (self.category, self.stock_status, self.brand): control.setMinimumWidth(150)
+        filters.addWidget(self.search, 0, 0, 1, 6)
+        filters.addWidget(self.category, 1, 0, 1, 2); filters.addWidget(self.stock_status, 1, 2, 1, 2); filters.addWidget(self.brand, 1, 4, 1, 2)
         add = QPushButton("+ Add Product"); add.setObjectName("primaryButton"); add.clicked.connect(self.add_product); add.setEnabled("product.add" in self.permissions)
         categories = QPushButton("Categories"); categories.clicked.connect(self.add_category)
         import_button = QPushButton("Import"); import_button.clicked.connect(self.import_csv)
         export_button = QPushButton("Export"); export_button.clicked.connect(self.export_csv)
-        refresh_button = QPushButton("Refresh Database"); refresh_button.clicked.connect(self.refresh_from_database)
         categories.setEnabled("product.add" in self.permissions)
         import_button.setEnabled("product.add" in self.permissions)
-        filters.addWidget(add); filters.addWidget(categories); filters.addWidget(import_button); filters.addWidget(export_button); filters.addWidget(refresh_button)
+        filters.addWidget(add, 2, 0); filters.addWidget(categories, 2, 1); filters.addWidget(import_button, 2, 2); filters.addWidget(export_button, 2, 3)
+        filters.setColumnStretch(0, 1); filters.setColumnStretch(1, 1); filters.setColumnStretch(2, 1); filters.setColumnStretch(3, 1)
         main.addLayout(filters)
         self.table = QTableWidget(0, 10)
         self.table.setHorizontalHeaderLabels(["#", "Product", "Barcode", "Category", "Brand", "Cost Price", "Selling Price", "Stock", "Status", "Actions"])
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        header=self.table.horizontalHeader(); header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch); header.setMinimumSectionSize(42)
+        for column,width in {0:38,2:92,3:86,4:72,5:92,6:100,7:60,8:82,9:178}.items(): self.table.setColumnWidth(column,width)
+        self.table.verticalHeader().setVisible(False)
+        self.table.verticalHeader().setDefaultSectionSize(56)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.itemSelectionChanged.connect(self.selection_changed)
         main.addWidget(self.table)
         self.result_label = QLabel(); main.addWidget(self.result_label)
-        body.addLayout(main, 4)
-        preview = QFrame(); preview.setObjectName("panel"); preview.setMinimumWidth(280); preview_box = QVBoxLayout(preview)
+        body.addLayout(main, 5)
+        preview = QFrame(); preview.setObjectName("panel"); preview.setFixedWidth(300); preview_box = QVBoxLayout(preview)
         preview_box.addWidget(QLabel("Product Preview"))
-        self.preview_image = QLabel("OIL"); self.preview_image.setAlignment(Qt.AlignmentFlag.AlignCenter); self.preview_image.setMinimumHeight(150)
+        self.preview_image = QLabel("OIL"); self.preview_image.setAlignment(Qt.AlignmentFlag.AlignCenter); self.preview_image.setFixedHeight(120)
         self.preview_image.setStyleSheet("font-size: 30px; font-weight: 900; color: #126ff5; background:#eef5ff; border-radius:10px;")
-        self.preview_name = QLabel("Select a product"); self.preview_name.setStyleSheet("font-size:18px;font-weight:800;")
-        self.preview_details = QLabel(""); self.preview_details.setWordWrap(True)
+        self.preview_name = QLabel("Select a product"); self.preview_name.setMinimumHeight(30); self.preview_name.setStyleSheet("font-size:18px;font-weight:800;color:#0f172a;background:white;")
+        self.preview_details = QFrame(); self.preview_details.setStyleSheet("background:white;")
+        details_box = QVBoxLayout(self.preview_details); details_box.setContentsMargins(0, 0, 0, 0); details_box.setSpacing(3)
+        self.preview_fields = {}
+        for key in ("Barcode", "Category", "Brand", "Cost Price", "Selling Price", "Current Stock", "Reorder Level", "Stock Movements"):
+            label = QLabel(f"{key}: -"); label.setFixedHeight(20); label.setStyleSheet("color:#334155;background:white;")
+            self.preview_fields[key] = label; details_box.addWidget(label)
+        self.preview_details.setFixedHeight(181)
         self.edit_button = QPushButton("Edit Product"); self.edit_button.clicked.connect(self.edit_product)
         self.duplicate_button = QPushButton("Duplicate Product"); self.duplicate_button.clicked.connect(self.duplicate_product)
         for widget in (self.preview_image, self.preview_name, self.preview_details, self.edit_button, self.duplicate_button): preview_box.addWidget(widget)
         preview_box.addWidget(QLabel("Stock Trend"))
-        self.stock_trend = StockTrend(); preview_box.addWidget(self.stock_trend)
+        self.stock_trend = StockTrend(); self.stock_trend.setFixedHeight(80); preview_box.addWidget(self.stock_trend)
         self.edit_button.setEnabled("product.edit" in self.permissions)
         self.duplicate_button.setEnabled("product.add" in self.permissions)
-        preview_box.addStretch(); body.addWidget(preview, 1)
+        preview_box.addStretch(); body.addWidget(preview, 1, Qt.AlignmentFlag.AlignTop)
         root.addLayout(body, 1)
         self.reload_filters(); self.refresh()
 
@@ -200,14 +213,14 @@ class ProductsPage(QWidget):
             value = session.scalar(select(func.sum(Product.purchase_price_cents * Product.stock_quantity)).where(Product.active.is_(True))) or 0
         while self.metrics.count():
             item = self.metrics.takeAt(0)
-            if item.widget(): item.widget().deleteLater()
+            if item.widget(): item.widget().hide(); item.widget().deleteLater()
         for column, metric in enumerate((("Total Products", str(total), "#1671f8", "#eff6ff"), ("Categories", str(category_count), "#10b981", "#ecfdf5"),
                                          ("Low Stock Items", str(low), "#f59e0b", "#fffbeb"), ("Inventory Value", money(value), "#ef4444", "#fef2f2"))):
             self.metrics.addWidget(self.metric_card(*metric), 0, column)
         self.table.setRowCount(len(rows))
         for row_number, (product, category_name) in enumerate(rows):
             status_text = "Out of Stock" if product.stock_quantity <= 0 else ("Low Stock" if product.stock_quantity <= product.low_stock_threshold else "In Stock")
-            values = [row_number + 1, product.name, product.barcode, category_name or "Uncategorized", product.brand,
+            values = [row_number + 1, product.name, product.barcode, category_name or "Uncategorized", product.brand or "-",
                       money(product.purchase_price_cents), money(product.selling_price_cents), product.stock_quantity, status_text]
             for column, value in enumerate(values):
                 item = QTableWidgetItem(str(value)); item.setData(Qt.ItemDataRole.UserRole, product.id if column == 1 else None)
@@ -218,12 +231,14 @@ class ProductsPage(QWidget):
                 self.table.setItem(row_number, column, item)
             actions = QWidget(); action_row = QHBoxLayout(actions); action_row.setContentsMargins(0, 0, 0, 0)
 
-            for text, callback in (("View", self.view_row), ("Edit", self.edit_row), ("Copy", self.copy_row), ("Delete", self.delete_row)):
+            for text, callback in (("View", self.view_row), ("Edit", self.edit_row), ("Delete", self.delete_row)):
                 button = QPushButton(text)
-                required = {"Edit": "product.edit", "Copy": "product.add", "Delete": "product.delete"}.get(text)
+                button.setFixedSize(54,32); button.setStyleSheet("padding: 2px 4px;")
+                required = {"Edit": "product.edit", "Delete": "product.delete"}.get(text)
                 if required: button.setEnabled(required in self.permissions)
                 button.clicked.connect(lambda _checked=False, pid=product.id, fn=callback: fn(pid)); action_row.addWidget(button)
             self.table.setCellWidget(row_number, 9, actions)
+            self.table.setRowHeight(row_number, 56)
         self.result_label.setText(f"Showing {len(rows)} of {total} products")
 
     def selected_product_id(self):
@@ -240,7 +255,17 @@ class ProductsPage(QWidget):
             movement_rows = session.scalars(select(InventoryMovement.quantity_delta).where(
                 InventoryMovement.product_id == product_id).order_by(InventoryMovement.created_at).limit(30)).all()
         self.preview_name.setText(product.name)
-        self.preview_details.setText(f"Barcode: {product.barcode}\nCategory: {category.name if category else 'Uncategorized'}\nBrand: {product.brand or '-'}\n\nCost Price: {money(product.purchase_price_cents)}\nSelling Price: {money(product.selling_price_cents)}\nCurrent Stock: {product.stock_quantity} Units\nReorder Level: {product.low_stock_threshold} Units\nStock Movements: {len(movement_rows)}")
+        detail_values = {
+            "Barcode": product.barcode,
+            "Category": category.name if category else "Uncategorized",
+            "Brand": product.brand or "-",
+            "Cost Price": money(product.purchase_price_cents),
+            "Selling Price": money(product.selling_price_cents),
+            "Current Stock": f"{product.stock_quantity} Units",
+            "Reorder Level": f"{product.low_stock_threshold} Units",
+            "Stock Movements": str(len(movement_rows)),
+        }
+        for key, value in detail_values.items(): self.preview_fields[key].setText(f"{key}: {value}")
         running = max(0, product.stock_quantity - sum(movement_rows)); trend = [running]
         for delta in movement_rows: running += delta; trend.append(running)
         self.stock_trend.set_values(trend)
