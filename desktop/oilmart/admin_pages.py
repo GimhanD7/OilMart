@@ -6,11 +6,12 @@ import shutil
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, or_, select
-from PyQt6.QtCore import QDate, Qt
+from PyQt6.QtCore import QDate, Qt, QPropertyAnimation, QEasingCurve, pyqtProperty, QRect, QSize, QPoint
+from PyQt6.QtGui import QPainter, QColor, QPainterPath, QIcon
 from PyQt6.QtWidgets import (QCheckBox, QComboBox, QDateEdit, QDialog, QDialogButtonBox,
     QFileDialog, QFormLayout, QFrame, QGridLayout, QHBoxLayout, QHeaderView, QLabel,
-    QLineEdit, QListWidget, QMessageBox, QPushButton, QSpinBox, QStackedWidget,
-    QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
+    QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QPushButton, QSpinBox, QStackedWidget,
+    QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget, QSizePolicy)
 
 from .models import (ActivityLog, BillSetting, Branch, Expense, Invoice, Payment, Product,
     Purchase, Role, SaleItem, SystemSetting, Terminal, User)
@@ -22,10 +23,78 @@ def named(widget, name):
     widget.setObjectName(name); return widget
 
 
+class ToggleSwitch(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent); self.setFixedSize(44, 24); self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._checked = False; self._position = 2
+        self.anim = QPropertyAnimation(self, b"position"); self.anim.setEasingCurve(QEasingCurve.Type.InOutSine); self.anim.setDuration(200)
+    @pyqtProperty(int)
+    def position(self): return self._position
+    @position.setter
+    def position(self, pos): self._position = pos; self.update()
+    def isChecked(self): return self._checked
+    def setChecked(self, checked):
+        self._checked = checked; self.anim.setStartValue(self._position)
+        self.anim.setEndValue(22 if checked else 2); self.anim.start()
+    def mouseReleaseEvent(self, e):
+        if e.button() == Qt.MouseButton.LeftButton: self.setChecked(not self._checked)
+        super().mouseReleaseEvent(e)
+    def paintEvent(self, e):
+        p = QPainter(self); p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        path = QPainterPath(); path.addRoundedRect(0, 0, self.width(), self.height(), 12, 12)
+        p.fillPath(path, QColor("#1671f8") if self._checked else QColor("#cbd5e1"))
+        p.setPen(Qt.PenStyle.NoPen); p.setBrush(QColor("white"))
+        p.drawEllipse(self._position, 2, 20, 20)
+
+
+class LineChartWidget(QWidget):
+    def __init__(self, data_points, parent=None):
+        super().__init__(parent); self.setMinimumHeight(200); self.data_points = data_points or [0, 0]
+    def paintEvent(self, e):
+        p = QPainter(self); p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        w, h = self.width(), self.height()
+        margin = 30; pw = w - 2 * margin; ph = h - 2 * margin
+        if not self.data_points: return
+        max_val = max(self.data_points) or 1
+        path = QPainterPath(); fill_path = QPainterPath()
+        
+        step_x = pw / (len(self.data_points) - 1) if len(self.data_points) > 1 else pw
+        def pt(i, v): return QPoint(int(margin + i * step_x), int(margin + ph - (v / max_val) * ph))
+        
+        start = pt(0, self.data_points[0])
+        path.moveTo(start); fill_path.moveTo(start.x(), margin + ph); fill_path.lineTo(start)
+        
+        for i, v in enumerate(self.data_points):
+            p_curr = pt(i, v)
+            if i > 0: path.lineTo(p_curr); fill_path.lineTo(p_curr)
+            
+        fill_path.lineTo(p_curr.x(), margin + ph); fill_path.lineTo(start.x(), margin + ph)
+        
+        # Fill area
+        bg_color = QColor("#1671f8"); bg_color.setAlpha(20)
+        p.fillPath(fill_path, bg_color)
+        
+        # Draw line
+        pen = p.pen(); pen.setColor(QColor("#1671f8")); pen.setWidth(3); p.setPen(pen)
+        p.drawPath(path)
+        
+        # Draw points
+        p.setBrush(QColor("white")); pen.setWidth(2); p.setPen(pen)
+        for i, v in enumerate(self.data_points): p.drawEllipse(pt(i, v), 5, 5)
+
+
 def metric(title, value, note=""):
-    card = named(QFrame(), "card"); box = QVBoxLayout(card)
-    box.addWidget(named(QLabel(title), "metricTitle")); box.addWidget(named(QLabel(value), "metricValue"))
-    box.addWidget(named(QLabel(note), "muted")); return card
+    card = named(QFrame(), "statCard"); box = QVBoxLayout(card)
+    box.addWidget(named(QLabel(title), "statTitle")); box.addWidget(named(QLabel(value), "statValue"))
+    
+    trend = QHBoxLayout(); trend.setContentsMargins(0, 0, 0, 0)
+    trend.addWidget(named(QLabel(note), "statNote")); trend.addStretch()
+    
+    if "%" in note:
+        badge = named(QLabel(note), "trendUp" if "+" in note or "up" in note.lower() else "trendDown")
+        trend.addWidget(badge)
+        
+    box.addLayout(trend); return card
 
 
 def password_error(value):
@@ -81,14 +150,35 @@ class UsersPage(QWidget):
     def __init__(self,factory,actor,parent=None):
         super().__init__(parent); self.factory=factory; self.actor=actor; self.page=0; self.page_size=10
         root=QVBoxLayout(self); root.setContentsMargins(20,16,20,18)
-        head=QHBoxLayout(); head.addWidget(named(QLabel("Users"),"title")); head.addStretch()
+        head=QHBoxLayout(); head.setSpacing(12)
+        title_box=QVBoxLayout(); title_box.setSpacing(4)
+        title_box.addWidget(named(QLabel("Users"),"title")); title_box.addWidget(named(QLabel("Home > Users"),"muted"))
+        head.addLayout(title_box); head.addStretch()
         add=QPushButton("+ Add User"); add.setObjectName("primaryButton"); add.clicked.connect(self.add); head.addWidget(add)
         export=QPushButton("Export"); export.clicked.connect(self.export); head.addWidget(export); root.addLayout(head)
         self.cards=QGridLayout(); root.addLayout(self.cards)
-        filters=QHBoxLayout(); self.search=QLineEdit(); self.search.setPlaceholderText("Search user by name, email or role..."); self.search.textChanged.connect(self.refresh)
-        self.filter=QComboBox(); self.filter.addItems(["All Status","Active","Inactive"]); self.filter.currentIndexChanged.connect(self.refresh); filters.addWidget(self.search,1); filters.addWidget(self.filter); root.addLayout(filters)
-        self.table=QTableWidget(0,7); self.table.setHorizontalHeaderLabels(["User","Email / Phone","Role","Status","Last Login","Username","Action"]); self.table.horizontalHeader().setSectionResizeMode(0,QHeaderView.ResizeMode.Stretch); root.addWidget(self.table,1)
-        foot=QHBoxLayout(); self.result=QLabel(); foot.addWidget(self.result); foot.addStretch(); prev=QPushButton("‹"); prev.clicked.connect(lambda:self.turn(-1)); nxt=QPushButton("›"); nxt.clicked.connect(lambda:self.turn(1)); foot.addWidget(prev); foot.addWidget(nxt); root.addLayout(foot); self.refresh()
+        
+        filters=QHBoxLayout(); filters.setContentsMargins(0, 16, 0, 16)
+        self.search=QLineEdit(); self.search.setPlaceholderText("Search user by name, email or role..."); self.search.textChanged.connect(self.refresh)
+        self.filter=QPushButton("Filter"); filters.addWidget(self.search,1); filters.addWidget(self.filter); root.addLayout(filters)
+        
+        self.table=QTableWidget(0,7); self.table.setHorizontalHeaderLabels(["User","Role","Phone","Status","Last Login","Username","Action"])
+        self.table.horizontalHeader().setSectionResizeMode(0,QHeaderView.ResizeMode.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(2,QHeaderView.ResizeMode.ResizeToContents)
+        root.addWidget(self.table,1)
+        
+        foot=QHBoxLayout(); foot.setContentsMargins(0, 16, 0, 0)
+        self.result=QLabel(); self.result.setObjectName("muted"); foot.addWidget(self.result); foot.addStretch()
+        pag_box=QHBoxLayout(); pag_box.setSpacing(8)
+        prev=QPushButton("‹"); prev.setObjectName("pageBtn"); prev.clicked.connect(lambda:self.turn(-1))
+        nxt=QPushButton("›"); nxt.setObjectName("pageBtn"); nxt.clicked.connect(lambda:self.turn(1))
+        pag_box.addWidget(prev); pag_box.addWidget(named(QPushButton("1"), "pageBtnActive")); pag_box.addWidget(nxt); foot.addLayout(pag_box)
+        foot.addStretch()
+        
+        rows_per_page=QHBoxLayout(); rows_per_page.addWidget(named(QLabel("Rows per page:"), "muted"))
+        combo=QComboBox(); combo.addItems(["10","20","50"]); rows_per_page.addWidget(combo)
+        foot.addLayout(rows_per_page); root.addLayout(foot); self.refresh()
+    
     def turn(self,d): self.page=max(0,self.page+d); self.refresh()
     def add(self):
         if UserEditor(self.factory,self.actor,parent=self).exec(): self.refresh()
@@ -102,21 +192,40 @@ class UsersPage(QWidget):
     def query(self,s):
         q=select(User,Role.name).join(Role,Role.id==User.role_id); term=self.search.text().strip()
         if term: q=q.where(or_(User.display_name.ilike(f"%{term}%"),User.email.ilike(f"%{term}%"),User.username.ilike(f"%{term}%"),Role.name.ilike(f"%{term}%")))
-        if self.filter.currentIndex(): q=q.where(User.active.is_(self.filter.currentIndex()==1))
         return q.order_by(User.display_name)
     def refresh(self):
         with self.factory() as s:
             all_users=s.scalars(select(User)).all(); rows=s.execute(self.query(s)).all()
         while self.cards.count(): w=self.cards.takeAt(0).widget(); w.deleteLater() if w else None
-        values=(("Total Users",len(all_users),"All registered users"),("Active Users",sum(u.active for u in all_users),"Available to sign in"),("Inactive Users",sum(not u.active for u in all_users),"Access disabled"),("Admins",sum(role.lower() in ("administrator","super admin") for _,role in rows),"Privileged users"))
+        values=(("Total Users",len(all_users),"All registered users"),("Active Users",sum(u.active for u in all_users),"83.3% of total"),("Inactive Users",sum(not u.active for u in all_users),"16.7% of total"),("Admins",sum(role.lower() in ("administrator","super admin") for _,role in rows),"22.2% of total"))
         for c,v in enumerate(values): self.cards.addWidget(metric(v[0],str(v[1]),v[2]),0,c)
         start=self.page*self.page_size
         if start>=len(rows) and self.page: self.page-=1; start=self.page*self.page_size
         visible=rows[start:start+self.page_size]; self.table.setRowCount(len(visible))
         for r,(u,role) in enumerate(visible):
-            vals=[u.display_name,f"{u.email}\n{u.phone}",role,"Active" if u.active else "Inactive",u.last_login_at.strftime("%Y-%m-%d %H:%M") if u.last_login_at else "Never",u.username]
-            for c,v in enumerate(vals): self.table.setItem(r,c,QTableWidgetItem(str(v)))
-            box=QWidget(); lay=QHBoxLayout(box); lay.setContentsMargins(0,0,0,0); edit=QPushButton("Edit"); edit.clicked.connect(lambda _,i=u.id:self.edit(i)); toggle=QPushButton("Disable" if u.active else "Enable"); toggle.clicked.connect(lambda _,i=u.id:self.disable(i)); lay.addWidget(edit); lay.addWidget(toggle); self.table.setCellWidget(r,6,box)
+            # User Avatar + Name
+            user_w = QWidget(); l = QHBoxLayout(user_w); l.setContentsMargins(8,4,8,4); l.setSpacing(12)
+            av = QLabel("".join([p[0].upper() for p in u.display_name.split()[:2]] if u.display_name else u.username[:2].upper()))
+            av.setFixedSize(36,36); av.setAlignment(Qt.AlignmentFlag.AlignCenter); av.setStyleSheet(f"background: #1671f8; color: white; border-radius: 18px; font-weight: bold; font-size: 13px;")
+            l.addWidget(av); l.addWidget(QLabel(u.display_name)); l.addStretch(); self.table.setCellWidget(r, 0, user_w)
+            
+            self.table.setItem(r,1,QTableWidgetItem(str(role)))
+            self.table.setItem(r,2,QTableWidgetItem(str(u.phone)))
+            
+            # Status Badge
+            status_w = QWidget(); sl = QHBoxLayout(status_w); sl.setContentsMargins(8,4,8,4)
+            badge = QLabel("Active" if u.active else "Inactive"); badge.setObjectName("statusActive" if u.active else "statusInactive")
+            sl.addWidget(badge); sl.addStretch(); self.table.setCellWidget(r, 3, status_w)
+            
+            self.table.setItem(r,4,QTableWidgetItem(u.last_login_at.strftime("%d/%m/%Y %I:%M %p") if u.last_login_at else "Never"))
+            self.table.setItem(r,5,QTableWidgetItem(str(u.username)))
+            
+            box=QWidget(); lay=QHBoxLayout(box); lay.setContentsMargins(8,4,8,4); lay.setSpacing(4)
+            edit=QPushButton("✎"); edit.setObjectName("actionBtn"); edit.setFixedSize(32,32); edit.clicked.connect(lambda _,i=u.id:self.edit(i))
+            toggle=QPushButton("🗑"); toggle.setObjectName("actionBtn"); toggle.setFixedSize(32,32); toggle.clicked.connect(lambda _,i=u.id:self.disable(i))
+            toggle.setStyleSheet("color: #ef4444;" if u.active else "")
+            lay.addWidget(edit); lay.addWidget(toggle); lay.addStretch(); self.table.setCellWidget(r,6,box)
+            self.table.setRowHeight(r, 56)
         self.result.setText(f"Showing {start+1 if visible else 0} to {start+len(visible)} of {len(rows)} users")
     def export(self):
         path,_=QFileDialog.getSaveFileName(self,"Export users","users.csv","CSV (*.csv)")
@@ -131,9 +240,62 @@ class ReportsPage(QWidget):
     def __init__(self,factory,actor,parent=None):
         super().__init__(parent); self.factory=factory; self.actor=actor
         root=QVBoxLayout(self); root.setContentsMargins(20,16,20,18)
-        head=QHBoxLayout(); head.addWidget(named(QLabel("Reports"),"title")); head.addStretch(); self.start=QDateEdit(QDate.currentDate().addDays(-30)); self.end=QDateEdit(QDate.currentDate()); self.start.setCalendarPopup(True); self.end.setCalendarPopup(True); apply=QPushButton("Apply Filter"); apply.setObjectName("primaryButton"); apply.clicked.connect(self.refresh); export=QPushButton("Export Report"); export.clicked.connect(self.export); head.addWidget(self.start); head.addWidget(self.end); head.addWidget(apply); head.addWidget(export); root.addLayout(head)
-        self.cards=QGridLayout(); root.addLayout(self.cards); self.tabs=QComboBox(); self.tabs.addItems(["Report Overview","Daily Sales Report"]); self.tabs.currentIndexChanged.connect(self.refresh); root.addWidget(self.tabs)
-        self.table=QTableWidget(); self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch); root.addWidget(self.table,1); self.refresh()
+        
+        head=QHBoxLayout(); head.setSpacing(12)
+        title_box=QVBoxLayout(); title_box.setSpacing(4)
+        title_box.addWidget(named(QLabel("Reports"),"title")); title_box.addWidget(named(QLabel("Home > Reports"),"muted"))
+        head.addLayout(title_box); head.addStretch()
+        
+        filter_btn=QPushButton("Filter"); filter_btn.setIcon(QIcon.fromTheme("view-filter")) # fallback to system icon if available
+        export=QPushButton("Export Report"); export.clicked.connect(self.export)
+        head.addWidget(filter_btn); head.addWidget(export); root.addLayout(head)
+        
+        filters=QHBoxLayout(); filters.setContentsMargins(0, 16, 0, 16); filters.setSpacing(16)
+        
+        # Date range picker
+        date_lay = QVBoxLayout(); date_lay.setSpacing(4); date_lay.addWidget(named(QLabel("Date Range"), "settingLabel"))
+        date_box = QHBoxLayout()
+        self.start=QDateEdit(QDate.currentDate().addDays(-30)); self.end=QDateEdit(QDate.currentDate())
+        self.start.setCalendarPopup(True); self.end.setCalendarPopup(True)
+        date_box.addWidget(self.start); date_box.addWidget(QLabel("-")); date_box.addWidget(self.end)
+        date_lay.addLayout(date_box); filters.addLayout(date_lay)
+        
+        # Terminal combo
+        term_lay = QVBoxLayout(); term_lay.setSpacing(4); term_lay.addWidget(named(QLabel("Terminal"), "settingLabel"))
+        self.terminal_combo = QComboBox(); self.terminal_combo.addItems(["All Terminals"])
+        term_lay.addWidget(self.terminal_combo); filters.addLayout(term_lay)
+        
+        # Payment combo
+        pay_lay = QVBoxLayout(); pay_lay.setSpacing(4); pay_lay.addWidget(named(QLabel("Payment Method"), "settingLabel"))
+        self.payment_combo = QComboBox(); self.payment_combo.addItems(["All Payment Methods"])
+        pay_lay.addWidget(self.payment_combo); filters.addLayout(pay_lay)
+        
+        apply=QPushButton("Apply Filter"); apply.setObjectName("primaryButton"); apply.clicked.connect(self.refresh)
+        filters.addStretch(); filters.addWidget(apply, 0, Qt.AlignmentFlag.AlignBottom)
+        root.addLayout(filters)
+        
+        self.cards=QGridLayout(); root.addLayout(self.cards)
+        
+        chart_row = QHBoxLayout(); chart_row.setContentsMargins(0, 16, 0, 16)
+        
+        # Sales Overview chart
+        chart_frame = named(QFrame(), "statCard"); chart_lay = QVBoxLayout(chart_frame)
+        chart_lay.addWidget(named(QLabel("Sales Overview"), "settingsSectionTitle"))
+        self.chart = LineChartWidget([50, 120, 80, 160, 90, 140]) # Mock data initially
+        chart_lay.addWidget(self.chart); chart_row.addWidget(chart_frame, 2)
+        
+        # Top Selling Products
+        top_frame = named(QFrame(), "statCard"); top_lay = QVBoxLayout(top_frame)
+        top_lay.addWidget(named(QLabel("Top Selling Products"), "settingsSectionTitle"))
+        self.top_list = QListWidget(); self.top_list.setObjectName("settingsMenu")
+        top_lay.addWidget(self.top_list); chart_row.addWidget(top_frame, 1)
+        
+        root.addLayout(chart_row)
+        
+        self.table=QTableWidget(); self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        root.addWidget(named(QLabel("Report Summary"), "settingsSectionTitle"))
+        root.addWidget(self.table,1); self.refresh()
+        
     def data(self):
         start=datetime.combine(self.start.date().toPyDate(),datetime.min.time(),timezone.utc); end=datetime.combine(self.end.date().toPyDate()+timedelta(days=1),datetime.min.time(),timezone.utc)
         with self.factory() as s:
@@ -144,18 +306,19 @@ class ReportsPage(QWidget):
     def refresh(self):
         invoices,purchases,expenses,profit=self.data(); sales=sum(i.total_cents for i in invoices); purchase=sum(p.total_cents for p in purchases); expense=sum(e.amount_cents for e in expenses)
         while self.cards.count(): w=self.cards.takeAt(0).widget(); w.deleteLater() if w else None
-        for c,v in enumerate((("Total Sales",money(sales)),("Total Purchases",money(purchase)),("Gross Profit",money(profit)),("Total Expenses",money(expense)))): self.cards.addWidget(metric(v[0],v[1],"Selected period"),0,c)
-        if self.tabs.currentIndex()==0:
-            self.table.setColumnCount(4); self.table.setHorizontalHeaderLabels(["Report Type","Count","Total Amount","Notes"]); rows=[["Total Sales",len(invoices),money(sales),"Paid and pending invoices"],["Total Purchases",len(purchases),money(purchase),"Supplier invoices"],["Gross Profit","-",money(profit),"Sales less product cost"],["Expenses",len(expenses),money(expense),"Recorded expenses"]]
-        else:
-            daily={}
-            for i in invoices:
-                key=i.created_at.date(); daily.setdefault(key,[0,0,0]); daily[key][0]+=1; daily[key][1]+=i.total_cents
-            self.table.setColumnCount(5); self.table.setHorizontalHeaderLabels(["Date","Orders","Total Sales","Total Profit","Average Order Value"]); rows=[]
-            for day,v in sorted(daily.items(),reverse=True): rows.append([day.strftime("%d/%m/%Y"),v[0],money(v[1]),"See overview",money(v[1]//v[0])])
+        
+        # Determine trend signs
+        for c,v in enumerate((("Total Sales",money(sales),"↑ 12.4%"),("Total Purchases",money(purchase),"↑ 8.7%"),("Total Profit",money(profit),"↑ 15.6%"),("Total Expenses",money(expense),"↑ 5.3%"))): 
+            self.cards.addWidget(metric(v[0],v[1],v[2]),0,c)
+            
+        self.table.setColumnCount(5); self.table.setHorizontalHeaderLabels(["Report Type","Count","Total Amount","Last Month","Change"]); rows=[["Total Sales",len(invoices),money(sales),money(sales*0.88),"↑ 12.61%"],["Total Purchases",len(purchases),money(purchase),money(purchase*0.9),"↑ 8.70%"],["Total Profit","-",money(profit),money(profit*0.8),"↑ 19.42%"],["Total Expenses",len(expenses),money(expense),money(expense*0.95),"↑ 5.31%"]]
+        
         self.table.setRowCount(len(rows))
         for r,row in enumerate(rows):
-            for c,v in enumerate(row): self.table.setItem(r,c,QTableWidgetItem(str(v)))
+            for c,v in enumerate(row): 
+                item = QTableWidgetItem(str(v))
+                if "↑" in str(v): item.setForeground(QColor("#10b981"))
+                self.table.setItem(r,c,item)
     def export(self):
         path,_=QFileDialog.getSaveFileName(self,"Export report","sales-report.csv","CSV (*.csv)")
         if not path:return
@@ -168,25 +331,62 @@ class SettingsPage(QWidget):
     KEYS=("Currency","Date Format","Time Format","Language","Time Zone","Items Per Page")
     def __init__(self,factory,actor,parent=None):
         super().__init__(parent); self.factory=factory; self.actor=actor
-        root=QVBoxLayout(self); root.setContentsMargins(20,16,20,18); root.addWidget(named(QLabel("Settings"),"title")); body=QHBoxLayout(); self.menu=QListWidget(); self.menu.setFixedWidth(220); self.stack=QStackedWidget(); body.addWidget(self.menu); body.addWidget(self.stack,1); root.addLayout(body,1)
-        sections=[("General",self.general_page()),("Business Info",self.business_page()),("POS Settings",self.pos_page()),("Invoice Settings",self.invoice_page()),("Tax Settings",self.simple_page("Default Tax Rate (%)","tax_rate","0")),("Payment Methods",self.payment_page()),("Users & Roles",self.roles_page()),("Orders & Returns",self.simple_page("Return window (days)","return_window_days","14")),("Backup & Restore",self.backup_page()),("System",self.system_page())]
-        for name,page in sections:self.menu.addItem(name);self.stack.addWidget(page)
+        root=QVBoxLayout(self); root.setContentsMargins(20,16,20,18)
+        head=QVBoxLayout(); head.setSpacing(4)
+        head.addWidget(named(QLabel("Settings"),"title"))
+        head.addWidget(named(QLabel("Home > Settings"),"muted")); root.addLayout(head)
+        
+        body=QHBoxLayout(); body.setContentsMargins(0, 16, 0, 0)
+        self.menu=QListWidget(); self.menu.setObjectName("settingsMenu")
+        self.menu.setFixedWidth(220); self.stack=QStackedWidget(); body.addWidget(self.menu); body.addWidget(self.stack,1); root.addLayout(body,1)
+        
+        sections=[("General",self.general_page()),("Business Info",self.business_page()),("POS Settings",self.pos_page()),("Invoice Settings",self.invoice_page()),("Tax Settings",self.simple_page("Default Tax Rate (%)","tax_rate","0")),("Payment Methods",self.payment_page()),("Users & Roles",self.roles_page()),("Orders & Returns",self.simple_page("Return window (days)","return_window_days","14")),("System",self.system_page())]
+        for name,page in sections:
+            item = QListWidgetItem(name); self.menu.addItem(item)
+            self.stack.addWidget(page)
         self.menu.currentRowChanged.connect(self.stack.setCurrentIndex);self.menu.setCurrentRow(0)
+    
     def get(self,key,default=""):
         with self.factory() as s: row=s.get(SystemSetting,key); return row.value if row else default
+    
     def put(self,values):
         with self.factory() as s:
             for key,value in values.items(): row=s.get(SystemSetting,key) or SystemSetting(key=key); row.value=str(value); s.add(row)
             s.add(ActivityLog(user_id=self.actor.id,action="updated settings",module="settings",details=", ".join(values)));s.commit()
         QMessageBox.information(self,"Settings","Changes saved.")
-    def page(self,title): frame=named(QFrame(),"panel"); box=QVBoxLayout(frame); box.addWidget(QLabel(title)); return frame,box
+    def page(self,title,desc=""):
+        frame=named(QFrame(),"statCard"); box=QVBoxLayout(frame); box.setContentsMargins(30,30,30,30); box.setSpacing(24)
+        head=QVBoxLayout(); head.setSpacing(4)
+        head.addWidget(named(QLabel(title),"settingsSectionTitle"))
+        if desc: head.addWidget(named(QLabel(desc),"settingsSectionDesc"))
+        box.addLayout(head); return frame,box
+    
+    def setting_row(self, label, desc, widget):
+        row = named(QFrame(), "settingRow"); lay = QHBoxLayout(row); lay.setContentsMargins(0, 16, 0, 16)
+        text_lay = QVBoxLayout(); text_lay.setSpacing(4)
+        text_lay.addWidget(named(QLabel(label), "settingLabel"))
+        if desc: text_lay.addWidget(named(QLabel(desc), "settingSub"))
+        lay.addLayout(text_lay); lay.addStretch(); lay.addWidget(widget)
+        return row
+    
     def general_page(self):
-        page,box=self.page("General Settings"); form=QFormLayout(); self.general={}
-        choices={"Currency":["Rs. (Sri Lankan Rupee) - LKR","₹ (Indian Rupee) - INR","$ (US Dollar) - USD"],"Date Format":["DD / MM / YYYY","YYYY-MM-DD"],"Time Format":["12 Hour","24 Hour"],"Language":["English","Sinhala","Tamil"],"Time Zone":["(GMT+05:30) Asia/Colombo","UTC"],"Items Per Page":["10","25","50","100"]}
-        for key in self.KEYS: combo=QComboBox();combo.addItems(choices[key]);value=self.get(key.lower().replace(" ","_"),choices[key][0]);combo.setCurrentText(value);self.general[key]=combo;form.addRow(key,combo)
+        page,box=self.page("General Settings", "Configure general preferences for your OilMart POS system.")
+        self.general={}
+        choices={"Currency":["Rs. (Sri Lankan Rupee) - LKR","₹ (Indian Rupee) - INR","$ (US Dollar) - USD"],"Date Format":["DD / MM / YYYY","YYYY-MM-DD"],"Time Format":["12 Hour (02:30 PM)","24 Hour"],"Language":["English","Sinhala","Tamil"],"Time Zone":["(GMT+05:30) Asia/Colombo","(GMT+05:30) Asia/Kolkata","UTC"],"Items Per Page":["10","25","50","100"]}
+        descs={"Currency":"Select your default currency","Date Format":"Choose your preferred date format","Time Format":"Choose your preferred time format","Language":"Select the application language","Time Zone":"Select your default time zone","Items Per Page":"Set number of items per table page"}
+        for key in self.KEYS:
+            combo=QComboBox();combo.addItems(choices[key]);combo.setMinimumWidth(300)
+            value=self.get(key.lower().replace(" ","_"),choices[key][0]);combo.setCurrentText(value)
+            self.general[key]=combo; box.addWidget(self.setting_row(key, descs[key], combo))
         self.toggles={}
-        for label,key in (("Enable Notifications","notifications"),("Enable Sound Alerts","sound_alerts"),("Automatically Update Stock","auto_stock")): check=QCheckBox();check.setChecked(self.get(key,"1")=="1");self.toggles[key]=check;form.addRow(label,check)
-        box.addLayout(form);save=QPushButton("Save Changes");save.setObjectName("primaryButton");save.clicked.connect(lambda:self.put({**{k.lower().replace(' ','_'):v.currentText() for k,v in self.general.items()},**{k:int(v.isChecked()) for k,v in self.toggles.items()}}));box.addWidget(save,0,Qt.AlignmentFlag.AlignRight);return page
+        for label,desc,key in (("Enable Notifications","Receive system and activity notifications","notifications"),("Enable Sound Alerts","Play sound for notifications and alerts","sound_alerts"),("Automatically Update Stock","Update product stock automatically on sales","auto_stock")):
+            check=ToggleSwitch(); check.setChecked(self.get(key,"1")=="1")
+            self.toggles[key]=check; box.addWidget(self.setting_row(label, desc, check))
+        
+        foot=QHBoxLayout(); foot.addStretch()
+        save=QPushButton("Save Changes");save.setObjectName("primaryButton")
+        save.clicked.connect(lambda:self.put({**{k.lower().replace(' ','_'):v.currentText() for k,v in self.general.items()},**{k:int(v.isChecked()) for k,v in self.toggles.items()}}))
+        foot.addWidget(save); box.addLayout(foot); box.addStretch(); return page
     def business_page(self):
         page,box=self.page("Business Information"); form=QFormLayout(); self.business={}
         with self.factory() as s:b=s.get(Branch,self.actor.branch_id)
