@@ -15,7 +15,8 @@ def default_url() -> str:
 
 
 def make_engine(url: str | None = None):
-    engine = create_engine(url or os.getenv("OILMART_DB_URL", default_url()), future=True)
+    database_url = url or os.getenv("OILMART_DB_URL", default_url())
+    engine = create_engine(database_url, future=True, pool_pre_ping=True)
     if engine.dialect.name == "sqlite":
         @event.listens_for(engine, "connect")
         def _sqlite_settings(connection, _):

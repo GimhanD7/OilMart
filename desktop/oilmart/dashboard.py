@@ -19,6 +19,7 @@ from .sales_page import SalesPage
 from .business_pages import DirectoryPage, PurchasesPage
 from .inventory_page import InventoryPage
 from .admin_pages import ReportsPage, SettingsPage, UsersPage
+from .runtime import RuntimeCoordinator
 
 
 def _load_dashboard_style() -> str:
@@ -328,6 +329,8 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.session_factory = session_factory
         self.user = user
+        self.runtime = RuntimeCoordinator(session_factory)
+        self.runtime.start()
         with session_factory() as session:
             self.permissions = permission_keys(session, user)
             self.role_name = session.scalar(select(Role.name).where(Role.id == user.role_id)) or "User"
@@ -402,7 +405,16 @@ class MainWindow(QMainWindow):
                      self.purchases_view, self.customers_view, self.suppliers_view, self.inventory_view,
                      self.reports_view, self.users_view, self.settings_view):
             self.stack.addWidget(page)
-        content.addWidget(self.stack); root.addLayout(content, 1); self.setCentralWidget(root_widget)
+        content.addWidget(self.stack)
+        footer = QFrame(); footer.setObjectName("runtimeFooter"); footer.setFixedHeight(38)
+        footer_box = QHBoxLayout(footer); footer_box.setContentsMargins(18, 0, 18, 0); footer_box.setSpacing(22)
+        self.connection_status = QLabel(); self.connection_status.setObjectName("runtimeStatus")
+        self.sync_status = QLabel(); self.sync_status.setObjectName("runtimeStatus")
+        self.backup_status = QLabel(); self.backup_status.setObjectName("runtimeStatus")
+        sync_now = QPushButton("Sync now"); sync_now.setObjectName("runtimeButton"); sync_now.clicked.connect(self.runtime.sync_now)
+        footer_box.addWidget(self.connection_status); footer_box.addWidget(self.sync_status); footer_box.addWidget(self.backup_status); footer_box.addStretch(); footer_box.addWidget(sync_now)
+        content.addWidget(footer); root.addLayout(content, 1); self.setCentralWidget(root_widget)
+        self.runtime_timer = QTimer(self); self.runtime_timer.timeout.connect(self.update_runtime_status); self.runtime_timer.start(2000); self.update_runtime_status()
         self.nav.setCurrentRow(0)
 
     def navigate(self, index):
@@ -456,6 +468,26 @@ class MainWindow(QMainWindow):
     def update_clock(self):
         now = QDateTime.currentDateTime()
         self.clock.setText(now.toString("ddd, dd MMM yyyy\nh:mm:ss AP"))
+
+    def update_runtime_status(self):
+        state = self.runtime.snapshot()
+        if state["configured"]:
+            self.connection_status.setText("● Online" if state["online"] else "● Offline — local mode")
+            self.connection_status.setStyleSheet("color:#10b981;font-weight:700" if state["online"] else "color:#f59e0b;font-weight:700")
+        else:
+            self.connection_status.setText("● Offline mode — API not configured")
+            self.connection_status.setStyleSheet("color:#64748b;font-weight:700")
+        self.sync_status.setText(f"Sync: {state['pending']} pending · {state['failed']} failed · {state['synced']} synced")
+        if state["backup"]:
+            self.backup_status.setText("Backup: " + state["backup"].astimezone().strftime("%d %b %H:%M"))
+        elif state["backup_error"]:
+            self.backup_status.setText("Backup: attention required")
+        else:
+            self.backup_status.setText("Backup: preparing…")
+
+    def closeEvent(self, event):
+        self.runtime.stop()
+        super().closeEvent(event)
 
     def ensure_shift(self):
         return True

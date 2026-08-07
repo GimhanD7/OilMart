@@ -1,4 +1,4 @@
-"""Versioned automatic migrations for the offline database."""
+"""Versioned automatic migrations for SQLite and PostgreSQL databases."""
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -11,6 +11,11 @@ Migration = tuple[int, str, Callable[[Connection], None]]
 
 def _initial_schema(connection: Connection) -> None:
     Base.metadata.create_all(connection)
+
+
+def _columns(connection: Connection, table_name: str) -> set[str]:
+    """Return column names without relying on a database-specific PRAGMA."""
+    return {column["name"] for column in inspect(connection).get_columns(table_name)}
 
 
 def _performance_indexes(connection: Connection) -> None:
@@ -26,7 +31,7 @@ def _performance_indexes(connection: Connection) -> None:
 
 
 def _receipt_printer_settings(connection: Connection) -> None:
-    columns = {row[1] for row in connection.execute(text("PRAGMA table_info(bill_settings)"))}
+    columns = _columns(connection, "bill_settings")
     if "printer_name" not in columns:
         connection.execute(text("ALTER TABLE bill_settings ADD COLUMN printer_name VARCHAR(255) NOT NULL DEFAULT ''"))
     if "auto_print" not in columns:
@@ -34,7 +39,7 @@ def _receipt_printer_settings(connection: Connection) -> None:
 
 
 def _invoice_shift_link(connection: Connection) -> None:
-    columns = {row[1] for row in connection.execute(text("PRAGMA table_info(invoices)"))}
+    columns = _columns(connection, "invoices")
     if "shift_id" not in columns:
         connection.execute(text("ALTER TABLE invoices ADD COLUMN shift_id INTEGER REFERENCES shifts(id)"))
     connection.execute(text(
@@ -44,11 +49,11 @@ def _invoice_shift_link(connection: Connection) -> None:
 
 
 def _login_security(connection: Connection) -> None:
-    columns = {row[1] for row in connection.execute(text("PRAGMA table_info(users)"))}
+    columns = _columns(connection, "users")
     if "failed_login_attempts" not in columns:
         connection.execute(text("ALTER TABLE users ADD COLUMN failed_login_attempts INTEGER NOT NULL DEFAULT 0"))
     if "locked_until" not in columns:
-        connection.execute(text("ALTER TABLE users ADD COLUMN locked_until DATETIME"))
+        connection.execute(text("ALTER TABLE users ADD COLUMN locked_until TIMESTAMP WITH TIME ZONE"))
     if "must_change_password" not in columns:
         connection.execute(text("ALTER TABLE users ADD COLUMN must_change_password BOOLEAN NOT NULL DEFAULT 0"))
 
@@ -58,14 +63,14 @@ def _product_categories(connection: Connection) -> None:
         "CREATE TABLE IF NOT EXISTS categories ("
         "id INTEGER PRIMARY KEY, name VARCHAR(100) NOT NULL UNIQUE, active BOOLEAN NOT NULL DEFAULT 1)"
     ))
-    columns = {row[1] for row in connection.execute(text("PRAGMA table_info(products)"))}
+    columns = _columns(connection, "products")
     if "category_id" not in columns:
         connection.execute(text("ALTER TABLE products ADD COLUMN category_id INTEGER REFERENCES categories(id)"))
     connection.execute(text("CREATE INDEX IF NOT EXISTS ix_products_category_id ON products(category_id)"))
 
 
 def _product_catalog_fields(connection: Connection) -> None:
-    columns = {row[1] for row in connection.execute(text("PRAGMA table_info(products)"))}
+    columns = _columns(connection, "products")
     if "brand" not in columns:
         connection.execute(text("ALTER TABLE products ADD COLUMN brand VARCHAR(100) NOT NULL DEFAULT ''"))
     if "image_path" not in columns:
@@ -74,7 +79,7 @@ def _product_catalog_fields(connection: Connection) -> None:
 
 
 def _invoice_status(connection: Connection) -> None:
-    columns = {row[1] for row in connection.execute(text("PRAGMA table_info(invoices)"))}
+    columns = _columns(connection, "invoices")
     if "status" not in columns:
         connection.execute(text("ALTER TABLE invoices ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'paid'"))
     connection.execute(text("UPDATE invoices SET status='pending' WHERE payment_method='credit' AND status='paid'"))
@@ -82,7 +87,7 @@ def _invoice_status(connection: Connection) -> None:
 
 
 def _business_partners_and_purchases(connection: Connection) -> None:
-    customer_columns = {row[1] for row in connection.execute(text("PRAGMA table_info(customers)"))}
+    customer_columns = _columns(connection, "customers")
     additions = {
         "email": "VARCHAR(160) NOT NULL DEFAULT ''", "address": "VARCHAR(255) NOT NULL DEFAULT ''",
         "customer_group": "VARCHAR(80) NOT NULL DEFAULT 'Retail'", "notes": "TEXT NOT NULL DEFAULT ''",
@@ -94,14 +99,14 @@ def _business_partners_and_purchases(connection: Connection) -> None:
     Purchase = Base.metadata.tables["purchases"]
     PurchaseItem = Base.metadata.tables["purchase_items"]
     Supplier.create(connection, checkfirst=True); Purchase.create(connection, checkfirst=True); PurchaseItem.create(connection, checkfirst=True)
-    movement_columns = {row[1] for row in connection.execute(text("PRAGMA table_info(inventory_movements)"))}
+    movement_columns = _columns(connection, "inventory_movements")
     if "purchase_id" not in movement_columns:
         connection.execute(text("ALTER TABLE inventory_movements ADD COLUMN purchase_id INTEGER REFERENCES purchases(id)"))
     connection.execute(text("CREATE INDEX IF NOT EXISTS ix_purchases_supplier_date ON purchases(supplier_id, purchased_at)"))
 
 
 def _administration_pages(connection: Connection) -> None:
-    branch_columns = {row[1] for row in connection.execute(text("PRAGMA table_info(branches)"))}
+    branch_columns = _columns(connection, "branches")
     for name, definition in {
         "email": "VARCHAR(160) NOT NULL DEFAULT ''", "alternate_phone": "VARCHAR(30) NOT NULL DEFAULT ''",
         "city": "VARCHAR(80) NOT NULL DEFAULT ''", "postal_code": "VARCHAR(20) NOT NULL DEFAULT ''",
@@ -110,8 +115,8 @@ def _administration_pages(connection: Connection) -> None:
     }.items():
         if name not in branch_columns:
             connection.execute(text(f"ALTER TABLE branches ADD COLUMN {name} {definition}"))
-    user_columns = {row[1] for row in connection.execute(text("PRAGMA table_info(users)"))}
-    for name, definition in {"email": "VARCHAR(160) NOT NULL DEFAULT ''", "phone": "VARCHAR(30) NOT NULL DEFAULT ''", "last_login_at": "DATETIME"}.items():
+    user_columns = _columns(connection, "users")
+    for name, definition in {"email": "VARCHAR(160) NOT NULL DEFAULT ''", "phone": "VARCHAR(30) NOT NULL DEFAULT ''", "last_login_at": "TIMESTAMP WITH TIME ZONE"}.items():
         if name not in user_columns:
             connection.execute(text(f"ALTER TABLE users ADD COLUMN {name} {definition}"))
     Base.metadata.tables["system_settings"].create(connection, checkfirst=True)
@@ -160,7 +165,7 @@ def migrate(engine) -> list[int]:
             CREATE TABLE IF NOT EXISTS schema_migrations (
                 version INTEGER PRIMARY KEY,
                 name VARCHAR(120) NOT NULL,
-                applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
         """))
         applied = {row[0] for row in connection.execute(text("SELECT version FROM schema_migrations"))}

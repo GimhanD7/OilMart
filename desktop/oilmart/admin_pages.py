@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import os
 import shutil
+import sqlite3
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, or_, select
@@ -352,7 +353,7 @@ class SettingsPage(QWidget):
         self.menu=QListWidget(); self.menu.setObjectName("settingsMenu")
         self.menu.setFixedWidth(220); self.stack=QStackedWidget(); body.addWidget(self.menu); body.addWidget(self.stack,1); root.addLayout(body,1)
         
-        sections=[("General",self.general_page()),("Business Info",self.business_page()),("POS Settings",self.pos_page()),("Invoice Settings",self.invoice_page()),("Tax Settings",self.simple_page("Default Tax Rate (%)","tax_rate","0")),("Payment Methods",self.payment_page()),("Users & Roles",self.roles_page()),("Orders & Returns",self.simple_page("Return window (days)","return_window_days","14")),("System",self.system_page())]
+        sections=[("General",self.general_page()),("Business Info",self.business_page()),("POS Settings",self.pos_page()),("Invoice Settings",self.invoice_page()),("Tax Settings",self.simple_page("Default Tax Rate (%)","tax_rate","0")),("Payment Methods",self.payment_page()),("Users & Roles",self.roles_page()),("Orders & Returns",self.simple_page("Return window (days)","return_window_days","14")),("Backup & Restore",self.backup_page()),("System",self.system_page())]
         for name,page in sections:
             item = QListWidgetItem(name); self.menu.addItem(item)
             self.stack.addWidget(page)
@@ -437,7 +438,11 @@ class SettingsPage(QWidget):
     def db_path(self): return self.factory.kw["bind"].url.database
     def backup(self):
         path,_=QFileDialog.getSaveFileName(self,"Database backup",f"oilmart-backup-{datetime.now():%Y%m%d-%H%M}.db","SQLite (*.db)")
-        if path: shutil.copy2(self.db_path(),path);QMessageBox.information(self,"Backup","Backup created successfully.")
+        if not path:return
+        engine=self.factory.kw["bind"]
+        if engine.dialect.name!="sqlite": QMessageBox.information(self,"Backup","Use pg_dump or your PostgreSQL provider's managed backup service.");return
+        with sqlite3.connect(self.db_path()) as source, sqlite3.connect(path) as destination: source.backup(destination)
+        QMessageBox.information(self,"Backup","Backup created successfully.")
     def restore(self):
         path,_=QFileDialog.getOpenFileName(self,"Restore database","","SQLite (*.db)")
         if not path:return

@@ -77,3 +77,6 @@ QLabel#statValue { color: #0f172a; font-size: 24px; font-weight: 800; }
 QLabel#statNote { color: #94a3b8; font-size: 12px; }
 QLabel#trendUp { color: #10b981; font-size: 12px; font-weight: 700; background: #ecfdf5; border-radius: 4px; padding: 2px 6px; }
 QLabel#trendDown { color: #ef4444; font-size: 12px; font-weight: 700; background: #fef2f2; border-radius: 4px; padding: 2px 6px; }
+QFrame#runtimeFooter { background: #ffffff; border-top: 1px solid #e2e8f0; }
+QLabel#runtimeStatus { color: #475569; font-size: 12px; font-weight: 600; }
+QPushButton#runtimeButton { padding: 5px 12px; min-height: 18px; color: #1671f8; border-color: #bfdbfe; }

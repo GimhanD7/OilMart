@@ -1,6 +1,6 @@
 # OilMart POS
 
-Offline-first Oil Mart point-of-sale monorepo foundation.
+Oil Mart point-of-sale monorepo with SQLite offline mode and PostgreSQL deployment support.
 
 ## What is implemented
 
@@ -69,3 +69,66 @@ Do not execute `desktop/oilmart/migrations.py` by file path; it is part of the
 ## Deployment notes
 
 The desktop data file defaults to `~/.oilmart/oilmart.db`; override it with `OILMART_DB_URL`. Configure `OILMART_API_URL` and `OILMART_API_TOKEN` for cloud sync. Laravel 13 requires PHP 8.3+; the local machine currently has PHP 8.2, so the cloud application must be installed on a compatible runtime before its migrations/controllers can be executed.
+
+## Run with PostgreSQL
+
+Install the updated desktop requirements, which include the Psycopg PostgreSQL driver:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r .\desktop\requirements.txt
+```
+
+Start PostgreSQL using `compose.postgres.yml` (Docker Desktop is required):
+
+```powershell
+$env:OILMART_POSTGRES_PASSWORD = "use-a-long-random-password"
+docker compose -f .\compose.postgres.yml up -d
+```
+
+Point OilMart at PostgreSQL and start it. On first launch, all tables and migration
+history are created automatically:
+
+```powershell
+$env:OILMART_DB_URL = "postgresql+psycopg://oilmart:use-a-long-random-password@localhost:5432/oilmart"
+$env:PYTHONPATH = "$PWD\desktop"
+.\.venv\Scripts\python.exe -m oilmart
+```
+
+For a remote production database, require TLS in the connection string:
+
+```powershell
+$env:OILMART_DB_URL = "postgresql+psycopg://USER:PASSWORD@HOST:5432/oilmart?sslmode=require"
+```
+
+To copy the existing local SQLite data into a new, empty PostgreSQL database:
+
+```powershell
+$env:OILMART_SOURCE_DB_URL = "sqlite:///C:/Users/gimha/.oilmart/oilmart.db"
+$env:OILMART_TARGET_DB_URL = "postgresql+psycopg://oilmart:PASSWORD@localhost:5432/oilmart"
+$env:PYTHONPATH = "$PWD\desktop"
+.\.venv\Scripts\python.exe -m oilmart.database_transfer
+```
+
+The transfer refuses to overwrite a PostgreSQL database containing branch data.
+After a successful transfer, keep `OILMART_DB_URL` set to the PostgreSQL URL whenever
+the desktop application starts.
+
+## Offline sync and automatic backups
+
+For offline-first operation, leave `OILMART_DB_URL` unset so every sale is committed
+to the local SQLite database immediately. Configure the HTTPS cloud API separately:
+
+```powershell
+$env:OILMART_API_URL = "https://your-server.example.com/api"
+$env:OILMART_API_TOKEN = "your-terminal-api-token"
+$env:OILMART_SYNC_INTERVAL = "30"
+$env:OILMART_BACKUP_INTERVAL = "21600"
+$env:OILMART_BACKUP_RETENTION = "14"
+$env:OILMART_BACKUP_DIR = "C:\OilMart-Backups"
+```
+
+The desktop footer always shows online/offline state, pending/failed/synced jobs,
+and the most recent backup. Sales continue locally while offline. Failed jobs use
+exponential retry and can also be retried with **Sync now**. SQLite backups use its
+consistent online-backup API and old backups are removed according to retention.
+Remote API URLs must use HTTPS; plain HTTP is accepted only for localhost development.

@@ -16,6 +16,7 @@ from .models import ActivityLog, Customer, Invoice, Product, Purchase, PurchaseI
 from .security import permission_keys
 from .services import PurchaseLine, create_purchase
 from .ui import money
+from .sync import enqueue_outbox
 
 
 def named(widget, object_name):
@@ -116,7 +117,13 @@ class DirectoryPage(QWidget):
             target = session.get(self.Model, partner.id) if partner else self.Model()
             for key, value in dialog.values.items(): setattr(target, key, value)
             session.add(target)
-            try: session.flush(); session.add(ActivityLog(user_id=self.user.id, action=f"{'updated' if partner else 'created'} {self.kind}", module=f"{self.kind}s", details=target.name)); session.commit()
+            try:
+                session.flush()
+                payload={"uuid":target.uuid,"name":target.name,"phone":target.phone,"email":target.email,
+                    "address":target.address,"notes":target.notes,"active":target.active}
+                payload["customer_group" if self.kind=="customer" else "category"] = target.customer_group if self.kind=="customer" else target.category
+                enqueue_outbox(session,self.kind,target.uuid,payload)
+                session.add(ActivityLog(user_id=self.user.id, action=f"{'updated' if partner else 'created'} {self.kind}", module=f"{self.kind}s", details=target.name)); session.commit()
             except Exception: session.rollback(); QMessageBox.warning(self, "Cannot save", "Name must be unique."); return
         self.reload_groups(); self.refresh()
     def view(self, partner_id): PartnerDetailsDialog(self.session_factory, self.kind, partner_id, self).exec()
@@ -136,7 +143,11 @@ class DirectoryPage(QWidget):
                 if not row.get("name"): continue
                 values = dict(name=row["name"], phone=row.get("phone", ""), email=row.get("email", ""), address=row.get("address", ""), notes=row.get("notes", ""), active=row.get("active", "1") != "0")
                 values["customer_group" if self.kind == "customer" else "category"] = row.get("group", "Retail" if self.kind == "customer" else "General")
-                session.add(self.Model(**values)); imported += 1
+                target=self.Model(**values); session.add(target); session.flush()
+                payload={"uuid":target.uuid,"name":target.name,"phone":target.phone,"email":target.email,
+                    "address":target.address,"notes":target.notes,"active":target.active}
+                payload["customer_group" if self.kind=="customer" else "category"] = target.customer_group if self.kind=="customer" else target.category
+                enqueue_outbox(session,self.kind,target.uuid,payload); imported += 1
             session.add(ActivityLog(user_id=self.user.id, action=f"imported {self.kind}s", module=f"{self.kind}s", details=str(imported)))
             try: session.commit()
             except Exception as exc: session.rollback(); QMessageBox.warning(self, "Import failed", str(exc)); return

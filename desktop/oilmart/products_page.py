@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import (
 from .models import ActivityLog, Category, InventoryMovement, Product, User
 from .security import permission_keys
 from .ui import money
+from .sync import enqueue_outbox
 
 
 class StockTrend(QWidget):
@@ -286,6 +287,11 @@ class ProductsPage(QWidget):
                 if stock_delta:
                     session.add(InventoryMovement(product_id=target.id, quantity_delta=stock_delta,
                                                   reason="opening_stock" if not product else "adjustment"))
+                enqueue_outbox(session, "product", target.uuid, {"uuid": target.uuid, "barcode": target.barcode,
+                    "name": target.name, "category_id": target.category_id, "brand": target.brand,
+                    "purchase_price_cents": target.purchase_price_cents, "selling_price_cents": target.selling_price_cents,
+                    "stock_quantity": target.stock_quantity, "low_stock_threshold": target.low_stock_threshold,
+                    "active": target.active})
                 session.add(ActivityLog(user_id=self.user.id, action="updated product" if product else "created product", module="products", details=target.name)); session.commit()
             except Exception:
                 session.rollback(); QMessageBox.warning(self, "Cannot save", "Barcode must be unique."); return
@@ -306,12 +312,18 @@ class ProductsPage(QWidget):
             copy = Product(barcode=f"{original.barcode}-COPY", name=f"{original.name} Copy", category_id=original.category_id, brand=original.brand,
                            purchase_price_cents=original.purchase_price_cents, selling_price_cents=original.selling_price_cents,
                            stock_quantity=0, low_stock_threshold=original.low_stock_threshold, image_path=original.image_path)
-            session.add(copy); session.add(ActivityLog(user_id=self.user.id, action="duplicated product", module="products", details=original.name)); session.commit()
+            session.add(copy); session.flush()
+            enqueue_outbox(session, "product", copy.uuid, {"uuid":copy.uuid,"barcode":copy.barcode,"name":copy.name,
+                "category_id":copy.category_id,"brand":copy.brand,"purchase_price_cents":copy.purchase_price_cents,
+                "selling_price_cents":copy.selling_price_cents,"stock_quantity":0,"active":True})
+            session.add(ActivityLog(user_id=self.user.id, action="duplicated product", module="products", details=original.name)); session.commit()
         self.refresh()
     def delete_row(self, product_id):
         if QMessageBox.question(self, "Disable product", "Remove this product from active sales?") != QMessageBox.StandardButton.Yes: return
         with self.session_factory() as session:
             product = session.get(Product, product_id); product.active = False
+            enqueue_outbox(session, "product", product.uuid, {"uuid": product.uuid, "barcode": product.barcode,
+                "name": product.name, "active": False, "stock_quantity": product.stock_quantity})
             session.add(ActivityLog(user_id=self.user.id, action="disabled product", module="products", details=product.name)); session.commit()
         self.refresh()
     def add_category(self):
@@ -338,8 +350,12 @@ class ProductsPage(QWidget):
             for row in csv.DictReader(file):
                 if session.scalar(select(Product.id).where(Product.barcode == row["barcode"])): continue
                 category = session.scalar(select(Category).where(Category.name == row.get("category", "")))
-                session.add(Product(barcode=row["barcode"], name=row["name"], category_id=category.id if category else None,
+                product=Product(barcode=row["barcode"], name=row["name"], category_id=category.id if category else None,
                     brand=row.get("brand", ""), purchase_price_cents=int(row.get("cost_cents", 0)), selling_price_cents=int(row.get("selling_cents", 0)),
-                    stock_quantity=int(row.get("stock", 0)), low_stock_threshold=int(row.get("reorder_level", 5)))); imported += 1
+                    stock_quantity=int(row.get("stock", 0)), low_stock_threshold=int(row.get("reorder_level", 5)))
+                session.add(product); session.flush(); enqueue_outbox(session,"product",product.uuid,{"uuid":product.uuid,
+                    "barcode":product.barcode,"name":product.name,"category_id":product.category_id,"brand":product.brand,
+                    "purchase_price_cents":product.purchase_price_cents,"selling_price_cents":product.selling_price_cents,
+                    "stock_quantity":product.stock_quantity,"low_stock_threshold":product.low_stock_threshold,"active":True}); imported += 1
             session.add(ActivityLog(user_id=self.user.id, action="imported products", module="products", details=str(imported))); session.commit()
         self.reload_filters(); self.refresh(); QMessageBox.information(self, "Imported", f"Imported {imported} products.")
